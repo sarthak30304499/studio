@@ -1,4 +1,3 @@
-
 "use client"
 
 import { Navbar } from "@/components/navbar";
@@ -27,7 +26,7 @@ const tiers = [
   },
   {
     name: "Pro",
-    price: "$29",
+    price: "$7",
     description: "The complete career intelligence suite.",
     features: [
       "Unlimited resume analysis",
