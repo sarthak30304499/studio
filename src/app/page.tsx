@@ -26,10 +26,10 @@ export default function Home() {
         
         {/* Hero Section - Symmetrical & High Performance */}
         <section className="relative pt-32 pb-20 md:pt-48 md:pb-40 flex flex-col items-center justify-center px-6 text-center max-w-7xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-black uppercase tracking-[0.2em] mb-10 animate-in fade-in slide-in-from-top-4 duration-1000">
-            <Zap size={12} className="fill-current" />
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-white text-[11px] font-black uppercase tracking-[0.2em] mb-10 animate-in fade-in slide-in-from-top-4 duration-1000">
+            <Zap size={12} className="fill-current text-primary" />
             Next-Gen Career Intelligence
-            <ArrowRight size={12} className="ml-1" />
+            <ArrowRight size={12} className="ml-1 text-primary" />
           </div>
 
           <h1 className="text-5xl md:text-8xl lg:text-9xl font-black tracking-tighter gradient-text leading-[0.9] mb-8 max-w-5xl animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-100 uppercase drop-shadow-2xl">
