@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from "react";
@@ -6,8 +7,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2, Loader2 } from "lucide-react";
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { CheckCircle2, Loader2, KeyRound } from "lucide-react";
+import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signInAnonymously } from "firebase/auth";
 import { useAuth } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
 
@@ -18,6 +19,10 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showGuestInput, setShowGuestInput] = useState(false);
+  const [guestCode, setGuestCode] = useState("");
+
+  const GUEST_ACCESS_CODE = "299792458";
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,6 +54,31 @@ export default function LoginPage() {
         description: error.message,
         variant: "destructive",
       });
+    }
+  };
+
+  const handleGuestLogin = async () => {
+    if (guestCode !== GUEST_ACCESS_CODE) {
+      toast({
+        title: "Invalid Access Code",
+        description: "Please check your guest credentials and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!auth) return;
+    setLoading(true);
+    try {
+      await signInAnonymously(auth);
+      router.push("/dashboard");
+    } catch (error: any) {
+      toast({
+        title: "Guest access failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -94,37 +124,62 @@ export default function LoginPage() {
             <p className="text-[#8A8AA0]">Enter your credentials to access your dashboard.</p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input 
-                id="email" 
-                type="email" 
-                placeholder="name@company.com" 
-                className="bg-[#0F0F1A] border-[#1E1E30] focus:ring-primary/30" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <Label htmlFor="password">Password</Label>
-                <Link href="#" className="text-xs text-primary hover:underline">Forgot password?</Link>
+          {!showGuestInput ? (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input 
+                  id="email" 
+                  type="email" 
+                  placeholder="name@company.com" 
+                  className="bg-[#0F0F1A] border-[#1E1E30] focus:ring-primary/30" 
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
               </div>
-              <Input 
-                id="password" 
-                type="password" 
-                className="bg-[#0F0F1A] border-[#1E1E30] focus:ring-primary/30" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Label htmlFor="password">Password</Label>
+                  <Link href="#" className="text-xs text-primary hover:underline">Forgot password?</Link>
+                </div>
+                <Input 
+                  id="password" 
+                  type="password" 
+                  className="bg-[#0F0F1A] border-[#1E1E30] focus:ring-primary/30" 
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+              <Button disabled={loading} className="w-full bg-primary hover:bg-primary/90 text-white font-bold h-11">
+                {loading ? <Loader2 className="animate-spin" /> : "Log In"}
+              </Button>
+            </form>
+          ) : (
+            <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
+              <div className="space-y-2">
+                <Label htmlFor="guestCode">Access Code</Label>
+                <Input 
+                  id="guestCode" 
+                  type="text" 
+                  placeholder="Enter guest access code..." 
+                  className="bg-[#0F0F1A] border-[#1E1E30] focus:ring-accent/30 text-center font-bold tracking-widest h-12" 
+                  value={guestCode}
+                  onChange={(e) => setGuestCode(e.target.value)}
+                />
+              </div>
+              <Button onClick={handleGuestLogin} disabled={loading} className="w-full bg-accent hover:bg-accent/90 text-accent-foreground font-black h-12 uppercase tracking-widest text-xs">
+                {loading ? <Loader2 className="animate-spin" /> : "Verify & Enter"}
+              </Button>
+              <button 
+                onClick={() => setShowGuestInput(false)} 
+                className="w-full text-center text-[10px] text-muted-foreground hover:text-foreground uppercase font-black tracking-widest transition-colors mt-2"
+              >
+                Back to standard login
+              </button>
             </div>
-            <Button disabled={loading} className="w-full bg-primary hover:bg-primary/90 text-white font-bold h-11">
-              {loading ? <Loader2 className="animate-spin" /> : "Log In"}
-            </Button>
-          </form>
+          )}
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
@@ -135,10 +190,20 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <Button onClick={handleGoogleLogin} variant="outline" className="w-full border-[#1E1E30] text-[#EEEEF5] hover:bg-[#1E1E30] h-11">
-            <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512"><path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"></path></svg>
-            Continue with Google
-          </Button>
+          <div className="grid grid-cols-2 gap-4">
+            <Button onClick={handleGoogleLogin} variant="outline" className="border-[#1E1E30] text-[#EEEEF5] hover:bg-[#1E1E30] h-11">
+              <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512"><path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"></path></svg>
+              Google
+            </Button>
+            <Button 
+              onClick={() => setShowGuestInput(true)} 
+              variant="outline" 
+              className={`border-[#1E1E30] text-[#EEEEF5] hover:bg-accent/10 hover:text-accent hover:border-accent/30 h-11 transition-all ${showGuestInput ? 'bg-accent/10 text-accent border-accent/30' : ''}`}
+            >
+              <KeyRound size={16} className="mr-2" />
+              Guest
+            </Button>
+          </div>
 
           <p className="text-center text-sm text-[#8A8AA0]">
             New to SUPERNOVA?{" "}
