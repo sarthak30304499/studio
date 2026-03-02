@@ -7,12 +7,10 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2, Loader2, KeyRound, AlertCircle } from "lucide-react";
+import { CheckCircle2, Loader2, KeyRound } from "lucide-react";
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signInAnonymously } from "firebase/auth";
 import { useAuth } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
-
-const GUEST_ACCESS_CODE = "299792458";
 
 export default function LoginPage() {
   const auth = useAuth();
@@ -21,8 +19,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showGuestInput, setShowGuestInput] = useState(false);
-  const [guestCode, setGuestCode] = useState("");
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,16 +54,6 @@ export default function LoginPage() {
   };
 
   const handleGuestLogin = async () => {
-    // Basic validation
-    if (!guestCode || guestCode.trim() !== GUEST_ACCESS_CODE) {
-      toast({
-        title: "Invalid Access Code",
-        description: "The code you entered is incorrect. Please double-check and try again.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     if (!auth) {
       toast({
         title: "System Error",
@@ -79,7 +65,7 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      // Attempt anonymous sign-in
+      // Attempt anonymous sign-in directly
       await signInAnonymously(auth);
       
       toast({
@@ -145,73 +131,40 @@ export default function LoginPage() {
           
           <div>
             <h1 className="text-3xl font-bold mb-2">Welcome back.</h1>
-            <p className="text-[#8A8AA0]">Enter your credentials to access your dashboard.</p>
+            <p className="text-[#8A8AA0]">Enter your credentials or enter as a guest.</p>
           </div>
 
-          {!showGuestInput ? (
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input 
-                  id="email" 
-                  type="email" 
-                  placeholder="name@company.com" 
-                  className="bg-[#0F0F1A] border-[#1E1E30] focus:ring-primary/30" 
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <Label htmlFor="password">Password</Label>
-                  <Link href="#" className="text-xs text-primary hover:underline">Forgot password?</Link>
-                </div>
-                <Input 
-                  id="password" 
-                  type="password" 
-                  className="bg-[#0F0F1A] border-[#1E1E30] focus:ring-primary/30" 
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-              <Button disabled={loading} className="w-full bg-primary hover:bg-primary/90 text-white font-bold h-11">
-                {loading ? <Loader2 className="animate-spin" /> : "Log In"}
-              </Button>
-            </form>
-          ) : (
-            <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-300">
-              <div className="bg-accent/5 border border-accent/20 rounded-2xl p-6 flex items-start gap-4">
-                 <AlertCircle className="text-accent shrink-0 mt-1" size={20} />
-                 <div>
-                    <h4 className="text-sm font-black uppercase tracking-widest text-accent mb-1">Guest Portal</h4>
-                    <p className="text-xs text-muted-foreground leading-relaxed">Please enter the 9-digit authorization code provided to you for early access.</p>
-                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="guestCode">Access Code</Label>
-                <Input 
-                  id="guestCode" 
-                  type="text" 
-                  placeholder="000 000 000" 
-                  className="bg-[#0F0F1A] border-[#1E1E30] focus:ring-accent/30 text-center font-bold tracking-[0.5em] h-14 text-xl" 
-                  value={guestCode}
-                  onChange={(e) => setGuestCode(e.target.value)}
-                  maxLength={12}
-                />
-              </div>
-              <Button onClick={handleGuestLogin} disabled={loading} className="w-full bg-accent hover:bg-accent/90 text-accent-foreground font-black h-12 uppercase tracking-widest text-xs shadow-lg shadow-accent/10">
-                {loading ? <Loader2 className="animate-spin" /> : "Verify & Enter"}
-              </Button>
-              <button 
-                onClick={() => setShowGuestInput(false)} 
-                className="w-full text-center text-[10px] text-muted-foreground hover:text-foreground uppercase font-black tracking-widest transition-colors mt-2"
-              >
-                Back to standard login
-              </button>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input 
+                id="email" 
+                type="email" 
+                placeholder="name@company.com" 
+                className="bg-[#0F0F1A] border-[#1E1E30] focus:ring-primary/30" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
             </div>
-          )}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Label htmlFor="password">Password</Label>
+                <Link href="#" className="text-xs text-primary hover:underline">Forgot password?</Link>
+              </div>
+              <Input 
+                id="password" 
+                type="password" 
+                className="bg-[#0F0F1A] border-[#1E1E30] focus:ring-primary/30" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            <Button disabled={loading} className="w-full bg-primary hover:bg-primary/90 text-white font-bold h-11">
+              {loading ? <Loader2 className="animate-spin" /> : "Log In"}
+            </Button>
+          </form>
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
@@ -228,11 +181,12 @@ export default function LoginPage() {
               Google
             </Button>
             <Button 
-              onClick={() => setShowGuestInput(true)} 
+              onClick={handleGuestLogin} 
+              disabled={loading}
               variant="outline" 
-              className={`border-[#1E1E30] text-[#EEEEF5] hover:bg-accent/10 hover:text-accent hover:border-accent/30 h-11 transition-all ${showGuestInput ? 'bg-accent/10 text-accent border-accent/30' : ''}`}
+              className="border-[#1E1E30] text-[#EEEEF5] hover:bg-accent/10 hover:text-accent hover:border-accent/30 h-11 transition-all"
             >
-              <KeyRound size={16} className="mr-2" />
+              {loading ? <Loader2 className="animate-spin h-4 w-4" /> : <KeyRound size={16} className="mr-2" />}
               Guest
             </Button>
           </div>
