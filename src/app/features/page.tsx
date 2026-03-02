@@ -84,18 +84,18 @@ export default function FeaturesPage() {
                   </div>
                </div>
                
-               <div className="flex-1 w-full relative perspective-1000">
+               <div className="flex-1 w-full relative [perspective:2000px]">
                   <div className="absolute -inset-8 bg-[#10B981]/10 rounded-[40px] blur-3xl opacity-0 group-hover:opacity-100 transition-opacity" />
-                  <div className="relative aspect-[4/3] bg-[#0F0F1A] border border-[#1E1E30] rounded-3xl overflow-hidden shadow-2xl transition-all duration-500 group-hover:[transform:rotateY(10deg)_rotateX(5deg)] group-hover:shadow-[0_20px_50px_rgba(16,185,129,0.15)]">
+                  <div className="relative aspect-[4/3] bg-[#0F0F1A] border border-[#1E1E30] rounded-3xl overflow-hidden shadow-2xl transition-all duration-700 group-hover:[transform:rotateY(12deg)_rotateX(6deg)_scale(1.02)] group-hover:shadow-[0_40px_100px_rgba(16,185,129,0.2)]">
                      <div className="w-full h-full relative">
                         <Image 
                           src={imageData.imageUrl} 
                           alt={imageData.description}
                           fill
-                          className="object-cover"
+                          className="object-cover transition-transform duration-700 group-hover:scale-110"
                           data-ai-hint={imageData.imageHint}
                         />
-                        <div className="absolute inset-0 bg-gradient-to-tr from-black/40 via-transparent to-white/5 pointer-events-none" />
+                        <div className="absolute inset-0 bg-gradient-to-tr from-black/60 via-transparent to-white/10 pointer-events-none" />
                      </div>
                   </div>
                </div>

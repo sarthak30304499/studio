@@ -2,16 +2,16 @@
 {
   "placeholderImages": [
     {
-      "id": "interview-success",
+      "id": "resume-analysis",
       "description": "Professional man being selected for a job with a 'Congratulations' message bubble",
-      "imageUrl": "https://picsum.photos/seed/interview-success/800/600",
+      "imageUrl": "https://picsum.photos/seed/congrats-selection/800/600",
       "imageHint": "hired professional"
     },
     {
-      "id": "resume-analysis",
-      "description": "High-tech resume scanning interface with data visualizations",
-      "imageUrl": "https://picsum.photos/seed/resume-scan/800/600",
-      "imageHint": "data analysis"
+      "id": "interview-success",
+      "description": "High-tech workspace representing professional achievement and success",
+      "imageUrl": "https://picsum.photos/seed/interview-success/800/600",
+      "imageHint": "professional success"
     },
     {
       "id": "job-matcher",
