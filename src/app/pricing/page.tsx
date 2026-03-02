@@ -1,3 +1,4 @@
+
 "use client"
 
 import { Navbar } from "@/components/navbar";
@@ -150,8 +151,8 @@ export default function PricingPage() {
         </div>
 
         {/* Trusted By Section */}
-        <section className="text-center mb-40 border-t border-border pt-20">
-           <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground mb-12">Empowering talent at top-tier firms</p>
+        <section className="text-center mb-20 border-t border-border pt-16">
+           <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground mb-10">Empowering talent at top-tier firms</p>
            <div className="flex flex-wrap justify-center items-center gap-12 md:gap-24 opacity-30 grayscale">
               <span className="text-2xl font-black text-white">GOOGLE</span>
               <span className="text-2xl font-black text-white">META</span>
@@ -162,9 +163,9 @@ export default function PricingPage() {
         </section>
 
         {/* FAQ Section */}
-        <section className="max-w-3xl mx-auto space-y-12">
-           <h3 className="text-3xl font-black uppercase tracking-tight text-center mb-16">Frequently Asked <span className="text-primary">Questions</span></h3>
-           <div className="space-y-8">
+        <section className="max-w-3xl mx-auto space-y-12 mb-32">
+           <h3 className="text-3xl font-black uppercase tracking-tight text-center mb-10">Frequently Asked <span className="text-primary">Questions</span></h3>
+           <div className="space-y-6">
               {faqs.map((faq, i) => (
                 <div key={i} className="p-8 bg-[#0F0F1A] border border-border rounded-2xl space-y-3">
                    <h4 className="text-lg font-black text-[#EEEEF5] tracking-tight">{faq.q}</h4>
@@ -175,7 +176,7 @@ export default function PricingPage() {
         </section>
 
         {/* Bottom CTA */}
-        <section className="mt-40 p-12 md:p-20 bg-primary/5 border border-primary/20 rounded-[40px] text-center relative overflow-hidden group">
+        <section className="p-12 md:p-20 bg-primary/5 border border-primary/20 rounded-[40px] text-center relative overflow-hidden group">
            <div className="absolute top-0 right-0 p-10 opacity-5 pointer-events-none group-hover:rotate-12 transition-transform duration-1000">
               <Globe size={300} className="text-primary" />
            </div>
