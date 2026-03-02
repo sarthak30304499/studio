@@ -7,7 +7,7 @@ import Link from "next/link";
 export default function Home() {
   return (
     <div className="min-h-screen bg-background relative overflow-x-hidden selection:bg-primary/30">
-      {/* Spline 3D Background Model */}
+      {/* Spline 3D Background Model - Non-interactive background */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <iframe 
           src="https://my.spline.design/blackhole-v83RYQb3QhJD3PxvCz5eHBbp/" 
