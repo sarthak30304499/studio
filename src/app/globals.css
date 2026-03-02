@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -10,29 +11,30 @@
     --card-foreground: 240 20% 95%;
     --popover: 240 25% 12%;
     --popover-foreground: 240 20% 95%;
-    --primary: 244 100% 69%;
+    --primary: 142 71% 45%; /* Emerald Green */
     --primary-foreground: 0 0% 100%;
     --secondary: 240 20% 15%;
     --secondary-foreground: 240 20% 95%;
     --muted: 240 20% 15%;
     --muted-foreground: 240 10% 60%;
-    --accent: 244 100% 69%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 84% 60%;
+    --accent: 48 96% 53%; /* Amber Yellow */
+    --accent-foreground: 240 33% 4%;
+    --destructive: 0 84% 60%; /* Rose Red */
     --destructive-foreground: 210 40% 98%;
     --border: 240 25% 15%;
     --input: 240 25% 15%;
-    --ring: 244 100% 69%;
+    --ring: 142 71% 45%;
     --radius: 0.75rem;
 
-    /* Custom Tokens */
+    /* Custom Tokens - NO BLUE */
     --bg-base: #07070D;
     --bg-surface: #0F0F1A;
     --bg-elevated: #161624;
     --border-subtle: #1E1E30;
-    --border-active: #6C63FF;
-    --accent-primary: #6C63FF;
-    --accent-secondary: #9B94FF;
+    --border-active: #10B981;
+    --accent-primary: #10B981;
+    --accent-secondary: #FBBF24;
+    --accent-tertiary: #EF4444;
     --text-primary: #EEEEF5;
     --text-secondary: #8A8AA0;
     --text-tertiary: #44445A;
@@ -44,7 +46,7 @@
     @apply border-border;
   }
   body {
-    @apply bg-[#07070D] text-[#EEEEF5] font-body antialiased selection:bg-[#6C63FF]/30;
+    @apply bg-[#07070D] text-[#EEEEF5] font-body antialiased selection:bg-[#10B981]/30;
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-headline tracking-tight;
@@ -52,15 +54,15 @@
 }
 
 .gradient-text {
-  @apply bg-clip-text text-transparent bg-gradient-to-r from-[#6C63FF] to-[#A78BFA];
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-[#10B981] via-[#FBBF24] to-[#EF4444];
 }
 
 .hero-glow {
-  background: radial-gradient(ellipse 900px 500px at 50% -80px, rgba(108,99,255,0.13), transparent);
+  background: radial-gradient(ellipse 900px 500px at 50% -80px, rgba(16, 185, 129, 0.1), transparent);
 }
 
 .card-hover-effect {
-  @apply transition-all duration-200 hover:border-[#6C63FF] hover:shadow-[0_0_32px_rgba(108,99,255,0.10)] hover:-translate-y-0.5;
+  @apply transition-all duration-200 hover:border-[#10B981] hover:shadow-[0_0_32px_rgba(16,185,129,0.10)] hover:-translate-y-0.5;
 }
 
 .glass-nav {

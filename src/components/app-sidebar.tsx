@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -9,8 +10,6 @@ import {
   GraduationCap,
   LineChart,
   Settings,
-  Bell,
-  Search,
   ChevronDown
 } from "lucide-react"
 
@@ -27,6 +26,7 @@ import {
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useUser } from "@/firebase"
 
 const items = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -39,6 +39,7 @@ const items = [
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const { user } = useUser()
 
   return (
     <Sidebar className="bg-[#0F0F1A] border-r border-[#1E1E30] w-[220px]">
@@ -57,7 +58,7 @@ export function AppSidebar() {
                 isActive={pathname === item.url}
                 className={`flex items-center gap-3 h-10 px-3 rounded-md transition-all duration-200 ${
                   pathname === item.url 
-                    ? "bg-[#6C63FF]/10 text-[#EEEEF5] border-l-[3px] border-l-[#6C63FF]" 
+                    ? "bg-[#10B981]/10 text-[#EEEEF5] border-l-[3px] border-l-[#10B981]" 
                     : "text-[#8A8AA0] hover:bg-[#1E1E30] hover:text-[#EEEEF5]"
                 }`}
               >
@@ -84,16 +85,16 @@ export function AppSidebar() {
 
       <SidebarFooter className="p-4 mt-auto">
         <div className="flex flex-col gap-4">
-          <Link href="/pricing" className="bg-gradient-to-r from-[#6C63FF] to-[#A78BFA] text-white text-[11px] font-bold py-2 rounded-lg text-center shadow-[0_0_16px_rgba(108,99,255,0.20)]">
+          <Link href="/pricing" className="bg-gradient-to-r from-[#10B981] via-[#FBBF24] to-[#EF4444] text-white text-[11px] font-bold py-2 rounded-lg text-center shadow-[0_0_16px_rgba(16,185,129,0.20)]">
              UPGRADE TO PRO
           </Link>
           <div className="flex items-center gap-3 px-2 py-3 border border-[#1E1E30] bg-[#161624] rounded-xl overflow-hidden">
-             <Avatar className="h-8 w-8 ring-2 ring-[#6C63FF]/20">
-               <AvatarImage src="https://picsum.photos/seed/user/200" />
-               <AvatarFallback>JD</AvatarFallback>
+             <Avatar className="h-8 w-8 ring-2 ring-[#10B981]/20">
+               <AvatarImage src={user?.photoURL || `https://picsum.photos/seed/${user?.uid}/200`} />
+               <AvatarFallback>{user?.displayName?.charAt(0) || "U"}</AvatarFallback>
              </Avatar>
              <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-[#EEEEF5] truncate">John Doe</p>
+                <p className="text-xs font-bold text-[#EEEEF5] truncate">{user?.displayName || "User"}</p>
                 <p className="text-[10px] text-[#8A8AA0] uppercase tracking-wider">Free Plan</p>
              </div>
              <ChevronDown size={14} className="text-[#44445A]" />

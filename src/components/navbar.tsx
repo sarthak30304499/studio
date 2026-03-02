@@ -1,3 +1,4 @@
+
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
@@ -20,7 +21,7 @@ export function Navbar() {
           <Button variant="ghost" className="text-[#EEEEF5] hover:bg-[#1E1E30]">Log In</Button>
         </Link>
         <Link href="/signup">
-          <Button className="bg-[#6C63FF] hover:bg-[#5A52E0] text-white shadow-[0_0_24px_rgba(108,99,255,0.20)]">
+          <Button className="bg-[#10B981] hover:bg-[#059669] text-white shadow-[0_0_24px_rgba(16,185,129,0.20)]">
             Get Started Free
           </Button>
         </Link>
