@@ -1,0 +1,35 @@
+
+{
+  "placeholderImages": [
+    {
+      "id": "interview-success",
+      "description": "Professional man being selected for a job with a 'Congratulations' message bubble",
+      "imageUrl": "https://picsum.photos/seed/interview-success/800/600",
+      "imageHint": "hired professional"
+    },
+    {
+      "id": "resume-analysis",
+      "description": "High-tech resume scanning interface with data visualizations",
+      "imageUrl": "https://picsum.photos/seed/resume-scan/800/600",
+      "imageHint": "data analysis"
+    },
+    {
+      "id": "job-matcher",
+      "description": "Map interface showing job connections across the globe",
+      "imageUrl": "https://picsum.photos/seed/job-match/800/600",
+      "imageHint": "global network"
+    },
+    {
+      "id": "higher-ed",
+      "description": "A student walking towards a prestigious university campus",
+      "imageUrl": "https://picsum.photos/seed/education/800/600",
+      "imageHint": "university campus"
+    },
+    {
+      "id": "career-intel",
+      "description": "Futuristic dashboard showing career growth projections and skill gaps",
+      "imageUrl": "https://picsum.photos/seed/career-dash/800/600",
+      "imageHint": "business dashboard"
+    }
+  ]
+}
