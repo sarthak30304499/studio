@@ -1,386 +1,404 @@
 "use client"
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import { Progress } from "@/components/ui/progress"
-import { 
-  MessageSquare, 
-  Sparkles, 
-  Send, 
-  RotateCcw, 
-  Lightbulb, 
-  CheckCircle2, 
-  AlertCircle,
-  BrainCircuit,
-  BarChart3
-} from "lucide-react"
-import { practiceInterviewWithAI, type PracticeInterviewOutput } from "@/ai/flows/practice-interview-with-ai-flow"
+import { useState, useEffect, useCallback } from "react"
+import { useAuth } from "@/lib/supabase/auth-provider"
+import {
+  saveInterviewSession, saveInterviewQuestion, saveInterviewAttempt,
+  updateQuestionModelAnswer, toggleSaveQuestion, getInterviewStats,
+  getInterviewSessions, logActivity, relativeTime,
+  type InterviewSession, type InterviewQuestion, type InterviewAttempt
+} from "@/lib/supabase/db"
+import { practiceInterviewWithAI } from "@/ai/flows/practice-interview-with-ai-flow"
 import { useToast } from "@/hooks/use-toast"
+import { Sparkles, Send, RotateCcw, Lightbulb, Flame, BookmarkCheck, Bookmark, ChevronDown, ChevronUp } from "lucide-react"
 
-type InterviewStage = "config" | "practice" | "feedback"
+function SkeletonBlock({ className = "" }: { className?: string }) {
+  return <div className={`rounded-xl animate-pulse ${className}`} style={{ background: "var(--dash-surface-2)" }} />
+}
+
+const DIFFICULTY_COLORS: Record<string, string> = {
+  Foundational: "var(--dash-green)", Intermediate: "var(--dash-amber)",
+  Advanced: "var(--dash-red)", Expert: "#8B5CF6"
+}
 
 export default function InterviewPrepPage() {
+  const { user, profile } = useAuth()
   const { toast } = useToast()
-  const [loading, setLoading] = useState(false)
-  const [stage, setStage] = useState<InterviewStage>("config")
-  
-  // Config State
-  const [role, setRole] = useState("Software Engineer")
-  const [industry, setIndustry] = useState("Technology")
-  const [type, setType] = useState<any>("Technical")
-  const [difficulty, setDifficulty] = useState<any>("Intermediate")
 
-  // Practice State
-  const [question, setQuestion] = useState("")
+  const [role, setRole] = useState(profile?.role ?? "Software Engineer")
+  const [industry, setIndustry] = useState(profile?.industry ?? "Technology")
+  const [type, setType] = useState("Technical")
+  const [difficulty, setDifficulty] = useState("Intermediate")
+
+  const [currentSession, setCurrentSession] = useState<InterviewSession | null>(null)
+  const [currentQuestion, setCurrentQuestion] = useState<InterviewQuestion | null>(null)
+  const [questionText, setQuestionText] = useState("")
   const [userAnswer, setUserAnswer] = useState("")
-  const [results, setResults] = useState<PracticeInterviewOutput | null>(null)
+  const [attempt, setAttempt] = useState<InterviewAttempt | null>(null)
+  const [modelAnswer, setModelAnswer] = useState("")
+  const [showAnswer, setShowAnswer] = useState(false)
 
-  const handleGenerateQuestion = async () => {
+  const [stage, setStage] = useState<"config" | "practice" | "feedback">("config")
+  const [loading, setLoading] = useState(false)
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [stats, setStats] = useState<any>(null)
+  const [sessions, setSessions] = useState<InterviewSession[]>([])
+  const [showStats, setShowStats] = useState(true)
+
+  useEffect(() => {
+    if (profile?.role) setRole(profile.role)
+    if (profile?.industry) setIndustry(profile.industry)
+  }, [profile])
+
+  const loadStats = useCallback(async () => {
+    if (!user?.id) return
+    setStatsLoading(true)
+    try {
+      const [s, sess] = await Promise.all([getInterviewStats(user.id), getInterviewSessions(user.id, 5)])
+      setStats(s)
+      setSessions(sess)
+    } finally {
+      setStatsLoading(false)
+    }
+  }, [user?.id])
+
+  useEffect(() => { loadStats() }, [loadStats])
+
+  const handleGenerate = async () => {
+    if (!user?.id) return
     setLoading(true)
     try {
-      const response = await practiceInterviewWithAI({
-        action: "generateQuestion",
-        targetRole: role,
-        industry: industry,
-        interviewType: type,
-        difficulty: difficulty
-      })
-      setQuestion(response.generatedQuestion || "")
+      const session = await saveInterviewSession(user.id, role, industry, type, difficulty)
+      setCurrentSession(session)
+
+      const res = await practiceInterviewWithAI({ action: "generateQuestion", targetRole: role, industry, interviewType: type, difficulty })
+      const qText = res.generatedQuestion ?? ""
+      const question = await saveInterviewQuestion(user.id, session.id, qText, type, difficulty)
+      setCurrentQuestion(question)
+      setQuestionText(qText)
       setStage("practice")
-      setResults(null)
       setUserAnswer("")
-    } catch (error) {
-      toast({
-        title: "Generation failed",
-        description: "Could not generate a question. Please try again.",
-        variant: "destructive"
-      })
+      setAttempt(null)
+      setModelAnswer("")
+      setShowAnswer(false)
+      await logActivity(user.id, "interview", `Started ${difficulty} ${type} session for ${role}`)
+      await loadStats()
+    } catch {
+      toast({ title: "Generation failed", description: "Could not generate a question. Please try again.", variant: "destructive" })
     } finally {
       setLoading(false)
     }
   }
 
   const handleGetFeedback = async () => {
-    if (!userAnswer.trim()) {
-      toast({
-        title: "Empty response",
-        description: "Please provide an answer to receive feedback.",
-        variant: "destructive"
-      })
-      return
-    }
+    if (!userAnswer.trim() || !user?.id || !currentQuestion) return
     setLoading(true)
     try {
-      const response = await practiceInterviewWithAI({
-        action: "getFeedback",
-        targetRole: role,
-        industry: industry,
-        interviewType: type,
-        difficulty: difficulty,
-        question: question,
-        userAnswer: userAnswer
+      const res = await practiceInterviewWithAI({ action: "getFeedback", targetRole: role, industry, interviewType: type, difficulty, question: questionText, userAnswer })
+      const overall = Math.round(((res.clarityScore ?? 0) + (res.relevanceScore ?? 0) + (res.depthScore ?? 0)) / 3)
+      const saved = await saveInterviewAttempt({
+        user_id: user.id, question_id: currentQuestion.id,
+        user_answer: userAnswer,
+        clarity_score: res.clarityScore ?? 0,
+        relevance_score: res.relevanceScore ?? 0,
+        depth_score: res.depthScore ?? 0,
+        overall_score: overall,
+        feedback: res.feedback ?? "",
       })
-      setResults(response)
+      setAttempt(saved)
       setStage("feedback")
-    } catch (error) {
-      toast({
-        title: "Feedback failed",
-        description: "AI feedback service is currently unavailable.",
-        variant: "destructive"
-      })
+      await loadStats()
+    } catch {
+      toast({ title: "Feedback failed", description: "AI feedback service unavailable.", variant: "destructive" })
     } finally {
       setLoading(false)
     }
   }
 
-  const handleGetModelAnswer = async () => {
+  const handleGetModel = async () => {
+    if (!currentQuestion) return
     setLoading(true)
     try {
-      const response = await practiceInterviewWithAI({
-        action: "getModelAnswer",
-        targetRole: role,
-        industry: industry,
-        interviewType: type,
-        difficulty: difficulty,
-        question: question
-      })
-      setResults(prev => prev ? ({ ...prev, modelAnswer: response.modelAnswer }) : response)
-    } catch (error) {
-      toast({
-        title: "Model answer failed",
-        description: "Could not retrieve model answer.",
-        variant: "destructive"
-      })
+      const res = await practiceInterviewWithAI({ action: "getModelAnswer", targetRole: role, industry, interviewType: type, difficulty, question: questionText })
+      const answer = res.modelAnswer ?? ""
+      setModelAnswer(answer)
+      setShowAnswer(true)
+      await updateQuestionModelAnswer(currentQuestion.id, answer)
+    } catch {
+      toast({ title: "Could not retrieve model answer", variant: "destructive" })
     } finally {
       setLoading(false)
     }
   }
+
+  const handleSaveQuestion = async () => {
+    if (!currentQuestion || !user?.id) return
+    const newSaved = !currentQuestion.is_saved
+    setCurrentQuestion(prev => prev ? { ...prev, is_saved: newSaved } : null)
+    await toggleSaveQuestion(user.id, currentQuestion.id, newSaved)
+  }
+
+  const handleReset = () => {
+    setStage("config")
+    setCurrentSession(null)
+    setCurrentQuestion(null)
+    setQuestionText("")
+    setUserAnswer("")
+    setAttempt(null)
+    setModelAnswer("")
+    setShowAnswer(false)
+  }
+
+  const SCORE_ITEMS = attempt ? [
+    { label: "Clarity", value: attempt.clarity_score ?? 0, color: "var(--dash-accent)" },
+    { label: "Relevance", value: attempt.relevance_score ?? 0, color: "var(--dash-green)" },
+    { label: "Depth", value: attempt.depth_score ?? 0, color: "var(--dash-amber)" },
+  ] : []
 
   return (
-    <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-12">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-border pb-10 gap-6">
-        <div>
-          <nav className="text-[10px] text-muted-foreground mb-3 uppercase tracking-[0.3em] font-black">Workspace / Intelligence</nav>
-          <h1 className="text-4xl md:text-5xl font-black tracking-tighter">Interview Prep</h1>
-        </div>
-        <Button 
-          onClick={() => {
-            setStage("config")
-            setResults(null)
-            setQuestion("")
-          }} 
-          variant="outline" 
-          className="h-12 px-8 border-border bg-card text-foreground font-black hover:border-primary uppercase tracking-widest text-xs"
-        >
-           Reset Session
-        </Button>
-      </header>
-
-      <div className="grid lg:grid-cols-12 gap-10 md:gap-16">
-        {/* Left Panel: Configuration */}
-        <aside className="lg:col-span-4 space-y-8">
-          <Card className="bg-card border-border overflow-hidden">
-            <CardHeader className="p-8 pb-0">
-              <CardTitle className="text-[11px] font-black text-muted-foreground uppercase tracking-[0.2em]">Interview Settings</CardTitle>
-            </CardHeader>
-            <CardContent className="p-8 space-y-6">
-              <div className="space-y-3">
-                <Label className="text-xs font-bold uppercase tracking-tight">Target Role</Label>
-                <Select value={role} onValueChange={setRole}>
-                  <SelectTrigger className="bg-background border-border h-12">
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Software Engineer">Software Engineer</SelectItem>
-                    <SelectItem value="Product Manager">Product Manager</SelectItem>
-                    <SelectItem value="Data Scientist">Data Scientist</SelectItem>
-                    <SelectItem value="UX Designer">UX Designer</SelectItem>
-                    <SelectItem value="Marketing Manager">Marketing Manager</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-3">
-                <Label className="text-xs font-bold uppercase tracking-tight">Type</Label>
-                <Select value={type} onValueChange={setType}>
-                  <SelectTrigger className="bg-background border-border h-12">
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Technical">Technical</SelectItem>
-                    <SelectItem value="Behavioral">Behavioral (STAR)</SelectItem>
-                    <SelectItem value="HR">General HR</SelectItem>
-                    <SelectItem value="Case Study">Case Study</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-3">
-                <Label className="text-xs font-bold uppercase tracking-tight">Difficulty</Label>
-                <Select value={difficulty} onValueChange={setDifficulty}>
-                  <SelectTrigger className="bg-background border-border h-12">
-                    <SelectValue placeholder="Select difficulty" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Foundational">Foundational</SelectItem>
-                    <SelectItem value="Intermediate">Intermediate</SelectItem>
-                    <SelectItem value="Advanced">Advanced</SelectItem>
-                    <SelectItem value="Expert">Expert</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <Button 
-                onClick={handleGenerateQuestion} 
-                disabled={loading}
-                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-14 font-black uppercase tracking-widest text-sm shadow-xl shadow-primary/10 group"
-              >
-                {loading ? "Initializing..." : (
-                  <span className="flex items-center gap-2">
-                    Generate Question <Sparkles size={16} className="group-hover:rotate-12 transition-transform" />
-                  </span>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card border-border border-l-4 border-l-accent">
-            <CardContent className="p-6 space-y-4">
-              <div className="flex items-center gap-2 text-accent">
-                <BrainCircuit size={18} />
-                <h4 className="text-xs font-black uppercase tracking-widest">AI Tip</h4>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed font-medium">
-                For Behavioral questions, try to follow the <strong>STAR</strong> method: Situation, Task, Action, and Result. This ensures clarity and impact.
-              </p>
-            </CardContent>
-          </Card>
-        </aside>
-
-        {/* Right Panel: Active Practice */}
-        <main className="lg:col-span-8 space-y-8">
-          {stage === "config" && !loading && (
-             <div className="h-[600px] flex flex-col items-center justify-center text-center p-16 border border-border border-dashed rounded-[32px] bg-card/30">
-                <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center mb-8">
-                  <MessageSquare size={40} className="text-muted-foreground opacity-30" />
-                </div>
-                <h2 className="text-3xl font-black mb-4 tracking-tight">Ready to Level Up?</h2>
-                <p className="text-muted-foreground max-w-sm leading-relaxed font-medium">Configure your target role and interview type on the left to start a high-performance practice session.</p>
-             </div>
+    <div className="min-h-screen" style={{ background: "var(--dash-bg)" }}>
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Header */}
+        <header className="mb-8 flex items-end justify-between pb-6" style={{ borderBottom: "1px solid var(--dash-border-1)" }}>
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.3em] font-black mb-1" style={{ color: "var(--dash-text-3)" }}>Workspace / Tools</p>
+            <h1 className="text-[32px] font-black tracking-tight" style={{ color: "var(--dash-text-1)" }}>Interview Prep</h1>
+          </div>
+          {stage !== "config" && (
+            <button onClick={handleReset} className="h-10 px-5 rounded-xl text-[13px] font-semibold" style={{ background: "var(--dash-surface-1)", border: "1px solid var(--dash-border-1)", color: "var(--dash-text-2)" }}>
+              Reset Session
+            </button>
           )}
+        </header>
 
-          {loading && (
-            <div className="space-y-8 animate-pulse">
-              <div className="h-40 bg-muted rounded-[32px]" />
-              <div className="h-[400px] bg-muted rounded-[32px]" />
-            </div>
-          )}
-
-          {stage !== "config" && !loading && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
-              {/* Question Card */}
-              <Card className="bg-card border-border overflow-hidden relative group">
-                <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                  <Sparkles size={100} className="text-primary" />
-                </div>
-                <CardContent className="p-10 space-y-6">
-                  <div className="flex items-center justify-between">
-                    <Badge variant="outline" className="border-primary/30 text-primary uppercase text-[10px] font-black px-3 py-1">
-                      {type} Question
-                    </Badge>
-                    <Badge variant="outline" className="border-accent/30 text-accent uppercase text-[10px] font-black px-3 py-1">
-                      {difficulty}
-                    </Badge>
-                  </div>
-                  <h3 className="text-2xl md:text-3xl font-black tracking-tight leading-tight">
-                    "{question}"
-                  </h3>
-                </CardContent>
-              </Card>
-
-              {/* Input Area */}
-              <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-xl font-black uppercase tracking-tight flex items-center gap-3">
-                    Your Response <Badge variant="secondary" className="bg-muted text-muted-foreground text-[10px]">{userAnswer.length} chars</Badge>
-                  </h3>
-                  {stage === "feedback" && (
-                    <Button variant="ghost" size="sm" onClick={() => setStage("practice")} className="text-xs font-black uppercase tracking-widest text-primary">
-                      <RotateCcw size={14} className="mr-2" /> Edit Answer
-                    </Button>
-                  )}
-                </div>
-                
-                <div className="relative">
-                  <Textarea 
-                    rows={10}
-                    placeholder="Type your answer here... Be as detailed as possible."
-                    className="bg-card border-border rounded-[32px] p-8 text-base focus:ring-primary/20 transition-all resize-none font-medium leading-relaxed"
-                    value={userAnswer}
-                    onChange={(e) => setUserAnswer(e.target.value)}
-                    disabled={stage === "feedback"}
-                  />
-                  {stage === "practice" && (
-                    <Button 
-                      onClick={handleGetFeedback}
-                      className="absolute bottom-6 right-6 h-12 px-8 bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest text-xs rounded-2xl shadow-lg"
+        <div className="grid lg:grid-cols-12 gap-6">
+          {/* Left: Settings */}
+          <aside className="lg:col-span-4 space-y-5">
+            {/* Config Card */}
+            <div className="rounded-[14px] overflow-hidden" style={{ background: "var(--dash-surface-1)", border: "1px solid var(--dash-border-1)" }}>
+              <div className="p-5 space-y-4">
+                <p className="text-[11px] font-black uppercase tracking-widest" style={{ color: "var(--dash-text-2)" }}>Interview Settings</p>
+                {[
+                  { label: "Target Role", value: role, setValue: setRole, options: ["Software Engineer", "Product Manager", "Data Scientist", "UX Designer", "Marketing Manager", "Data Analyst"] },
+                  { label: "Industry", value: industry, setValue: setIndustry, options: ["Technology", "Finance", "Healthcare", "Consulting", "E-commerce", "Education"] },
+                  { label: "Type", value: type, setValue: setType, options: ["Technical", "Behavioral", "HR", "Case Study"] },
+                  { label: "Difficulty", value: difficulty, setValue: setDifficulty, options: ["Foundational", "Intermediate", "Advanced", "Expert"] },
+                ].map(({ label, value, setValue, options }) => (
+                  <div key={label} className="space-y-1.5">
+                    <label className="text-[10px] uppercase tracking-wider font-black" style={{ color: "var(--dash-text-3)" }}>{label}</label>
+                    <select
+                      value={value} onChange={e => setValue(e.target.value)}
+                      className="w-full h-10 px-3 rounded-xl text-[13px] outline-none"
+                      style={{ background: "var(--dash-surface-2)", border: "1px solid var(--dash-border-1)", color: "var(--dash-text-1)" }}
                     >
-                      Analyze & Score <Send size={16} className="ml-2" />
-                    </Button>
+                      {options.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </div>
+                ))}
+                <button
+                  onClick={handleGenerate}
+                  disabled={loading}
+                  className="w-full h-12 rounded-xl font-semibold text-[14px] text-white flex items-center justify-center gap-2 transition-all"
+                  style={{ background: loading ? "var(--dash-surface-3)" : "var(--dash-accent)", cursor: loading ? "not-allowed" : "pointer" }}
+                >
+                  {loading ? "Generating..." : <><Sparkles size={16} /> Generate Question</>}
+                </button>
+              </div>
+            </div>
+
+            {/* AI Tip */}
+            <div className="rounded-[14px] p-5" style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.20)" }}>
+              <p className="text-[10px] font-black uppercase tracking-widest mb-2" style={{ color: "var(--dash-amber)" }}>AI Tip</p>
+              <p className="text-[12px] leading-relaxed" style={{ color: "var(--dash-text-2)" }}>
+                For Behavioral questions, use the <strong style={{ color: "var(--dash-text-1)" }}>STAR method</strong>: Situation, Task, Action, Result. This ensures clarity and impact in every answer.
+              </p>
+            </div>
+
+            {/* Session Stats */}
+            <div className="rounded-[14px] overflow-hidden" style={{ background: "var(--dash-surface-1)", border: "1px solid var(--dash-border-1)" }}>
+              <button className="w-full flex items-center justify-between px-5 py-4" onClick={() => setShowStats(!showStats)}>
+                <p className="text-[11px] font-black uppercase tracking-widest" style={{ color: "var(--dash-text-2)" }}>Session Stats</p>
+                {showStats ? <ChevronUp size={14} style={{ color: "var(--dash-text-3)" }} /> : <ChevronDown size={14} style={{ color: "var(--dash-text-3)" }} />}
+              </button>
+              {showStats && (
+                <div className="px-5 pb-5 space-y-4">
+                  {statsLoading ? (
+                    <div className="space-y-3">{[1, 2, 3].map(i => <SkeletonBlock key={i} className="h-10" />)}</div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { label: "Generated", value: stats?.generated ?? 0 },
+                          { label: "Answered", value: stats?.answered ?? 0 },
+                          { label: "Avg Score", value: stats?.avgScore != null ? `${stats.avgScore}%` : "—" },
+                          { label: "Saved", value: stats?.savedCount ?? 0 },
+                        ].map(({ label, value }) => (
+                          <div key={label} className="rounded-xl p-3" style={{ background: "var(--dash-surface-2)" }}>
+                            <p className="text-[11px]" style={{ color: "var(--dash-text-3)" }}>{label}</p>
+                            <p className="text-[18px] font-black tabular-nums" style={{ color: "var(--dash-text-1)", fontFeatureSettings: '"tnum"' }}>{value}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Streak */}
+                      <div className="rounded-xl p-4 flex items-center gap-3" style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)" }}>
+                        <Flame size={22} style={{ color: "var(--dash-amber)" }} />
+                        <div>
+                          <p className="text-[24px] font-black" style={{ color: "var(--dash-text-1)" }}>{stats?.streak ?? 0} day{stats?.streak !== 1 ? "s" : ""}</p>
+                          <p className="text-[11px]" style={{ color: "var(--dash-amber)" }}>Practice streak</p>
+                        </div>
+                      </div>
+                      {/* Weak areas */}
+                      {stats?.weakAreas?.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest mb-2" style={{ color: "var(--dash-text-3)" }}>Weak Areas</p>
+                          {stats.weakAreas.map((w: any) => (
+                            <div key={w.category} className="flex items-center justify-between py-1.5">
+                              <span className="text-[12px]" style={{ color: "var(--dash-text-2)" }}>{w.category}</span>
+                              <span className="text-[11px] font-black" style={{ color: "var(--dash-red)" }}>{w.avgScore}% avg</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Recent sessions */}
+                      {sessions.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest mb-2" style={{ color: "var(--dash-text-3)" }}>Recent Sessions</p>
+                          {sessions.slice(0, 3).map((s, i) => (
+                            <div key={i} className="flex items-center justify-between py-1.5">
+                              <span className="text-[12px] truncate" style={{ color: "var(--dash-text-2)" }}>{s.target_role} · {s.difficulty}</span>
+                              <span className="text-[10px] font-mono-data ml-2 flex-shrink-0" style={{ color: "var(--dash-text-3)" }}>{relativeTime(s.created_at)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
-              </div>
-
-              {/* Feedback Section */}
-              {results && results.actionPerformed === "feedbackProvided" && (
-                <div className="space-y-8 animate-in zoom-in-95 duration-500">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {[
-                      { label: "Clarity", val: results.clarityScore, color: "text-primary" },
-                      { label: "Relevance", val: results.relevanceScore, color: "text-accent" },
-                      { label: "Depth", val: results.depthScore, color: "text-destructive" }
-                    ].map((s, i) => (
-                      <Card key={i} className="bg-card border-border overflow-hidden">
-                        <CardContent className="p-6 space-y-4">
-                          <div className="flex justify-between items-end">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{s.label}</span>
-                            <span className={`text-2xl font-black ${s.color}`}>{s.val}%</span>
-                          </div>
-                          <Progress value={s.val} className="h-1.5" />
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-
-                  <Card className="bg-card border-border">
-                    <CardHeader className="p-8 pb-4">
-                      <CardTitle className="text-lg font-black uppercase tracking-tight flex items-center gap-2">
-                        <BarChart3 size={20} className="text-primary" /> AI Intelligence Report
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-8 space-y-6">
-                      <div className="p-6 bg-muted/30 rounded-2xl border border-border">
-                        <p className="text-sm text-foreground leading-relaxed font-medium">{results.feedback}</p>
-                      </div>
-                      
-                      <div className="flex flex-wrap gap-4 pt-4 border-t border-border">
-                        <Button onClick={handleGetModelAnswer} variant="outline" className="h-12 border-border text-muted-foreground font-black px-6 uppercase tracking-widest text-xs hover:border-accent hover:text-accent">
-                           <Lightbulb size={16} className="mr-2" /> Show Model Answer
-                        </Button>
-                        <Button onClick={handleGenerateQuestion} className="h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-black px-8 uppercase tracking-widest text-xs ml-auto">
-                           Next Question <ArrowRight size={16} className="ml-2" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-
-              {/* Model Answer View */}
-              {results?.modelAnswer && (
-                <Card className="bg-primary/5 border border-primary/20 animate-in slide-in-from-top-4 duration-500">
-                  <CardHeader className="p-8 pb-4">
-                    <CardTitle className="text-lg font-black uppercase tracking-tight flex items-center gap-2 text-primary">
-                      <CheckCircle2 size={20} /> Professional Reference Answer
-                    </CardTitle>
-                    <CardDescription className="text-xs font-bold uppercase tracking-widest opacity-60">Curated by Interview Intelligence</CardDescription>
-                  </CardHeader>
-                  <CardContent className="p-8">
-                    <div className="prose prose-invert max-w-none">
-                       <p className="text-sm text-foreground leading-relaxed font-medium whitespace-pre-wrap">{results.modelAnswer}</p>
-                    </div>
-                  </CardContent>
-                </Card>
               )}
             </div>
-          )}
-        </main>
+          </aside>
+
+          {/* Right: Practice Panel */}
+          <main className="lg:col-span-8 space-y-5">
+            {/* Empty state */}
+            {stage === "config" && !loading && (
+              <div className="h-[540px] flex flex-col items-center justify-center text-center rounded-[20px] border-2 border-dashed"
+                style={{ borderColor: "var(--dash-border-2)", background: "var(--dash-surface-1)" }}>
+                <svg width="72" height="72" viewBox="0 0 72 72" fill="none" className="mb-6 opacity-20">
+                  <path d="M36 8L62 24V48L36 64L10 48V24L36 8Z" stroke="#6C63FF" strokeWidth="2" />
+                  <circle cx="36" cy="36" r="12" stroke="#6C63FF" strokeWidth="2" />
+                  <circle cx="36" cy="36" r="4" fill="#6C63FF" fillOpacity="0.4" />
+                </svg>
+                <h2 className="text-[20px] font-black mb-2" style={{ color: "var(--dash-text-1)" }}>Ready to Level Up?</h2>
+                <p className="text-[13px] max-w-[300px] leading-relaxed" style={{ color: "var(--dash-text-2)" }}>
+                  Configure your target role and interview type to start a high-performance AI-powered practice session.
+                </p>
+              </div>
+            )}
+
+            {/* Loading skeleton */}
+            {loading && (
+              <div className="space-y-5">
+                <SkeletonBlock className="h-36 rounded-[16px]" />
+                <SkeletonBlock className="h-[300px] rounded-[16px]" />
+              </div>
+            )}
+
+            {/* Question + practice */}
+            {stage !== "config" && !loading && (
+              <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                {/* Question card */}
+                <div className="rounded-[16px] p-6" style={{ background: "var(--dash-surface-1)", border: "1px solid var(--dash-border-1)" }}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex gap-2">
+                      <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full" style={{ background: "var(--dash-accent-soft)", color: "var(--dash-accent)" }}>{type}</span>
+                      <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full" style={{ background: `${DIFFICULTY_COLORS[difficulty]}1a`, color: DIFFICULTY_COLORS[difficulty] }}>{difficulty}</span>
+                    </div>
+                    <button onClick={handleSaveQuestion} className="p-1.5 rounded-lg" style={{ color: currentQuestion?.is_saved ? "var(--dash-accent)" : "var(--dash-text-3)" }}>
+                      {currentQuestion?.is_saved ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+                    </button>
+                  </div>
+                  <h3 className="text-[18px] font-black leading-snug" style={{ color: "var(--dash-text-1)" }}>"{questionText}"</h3>
+                </div>
+
+                {/* Answer area */}
+                <div className="rounded-[16px] overflow-hidden" style={{ background: "var(--dash-surface-1)", border: "1px solid var(--dash-border-1)" }}>
+                  <div className="p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[12px] font-black uppercase tracking-widest" style={{ color: "var(--dash-text-2)" }}>Your Response</p>
+                      <span className="text-[11px] font-mono-data" style={{ color: "var(--dash-text-3)" }}>{userAnswer.length} chars</span>
+                    </div>
+                    <textarea
+                      rows={8}
+                      placeholder="Type your answer here... Be as detailed as possible."
+                      value={userAnswer}
+                      onChange={e => setUserAnswer(e.target.value)}
+                      disabled={stage === "feedback"}
+                      className="w-full outline-none resize-none text-[14px] leading-relaxed bg-transparent"
+                      style={{ color: "var(--dash-text-1)" }}
+                    />
+                  </div>
+                  {stage === "practice" && (
+                    <div className="px-5 pb-5">
+                      <button onClick={handleGetFeedback} disabled={loading}
+                        className="w-full h-12 rounded-xl font-semibold text-[14px] text-white flex items-center justify-center gap-2"
+                        style={{ background: "var(--dash-accent)" }}>
+                        <Send size={15} /> Analyze & Score
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Feedback */}
+                {attempt && stage === "feedback" && (
+                  <div className="space-y-4 animate-in fade-in duration-500">
+                    {/* Score cards */}
+                    <div className="grid grid-cols-3 gap-3">
+                      {SCORE_ITEMS.map(({ label, value, color }) => (
+                        <div key={label} className="rounded-[12px] p-4" style={{ background: "var(--dash-surface-1)", border: "1px solid var(--dash-border-1)" }}>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[11px]" style={{ color: "var(--dash-text-2)" }}>{label}</span>
+                            <span className="text-[20px] font-black" style={{ color }}>{value}%</span>
+                          </div>
+                          <div className="h-1.5 rounded-full" style={{ background: "var(--dash-surface-3)" }}>
+                            <div className="h-full rounded-full" style={{ width: `${value}%`, background: color, transition: "width 0.8s ease-out" }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Feedback text */}
+                    <div className="rounded-[14px] p-5" style={{ background: "var(--dash-surface-1)", border: "1px solid var(--dash-border-1)" }}>
+                      <p className="text-[11px] font-black uppercase tracking-widest mb-3" style={{ color: "var(--dash-text-2)" }}>AI Intelligence Report</p>
+                      <p className="text-[13px] leading-relaxed" style={{ color: "var(--dash-text-2)" }}>{attempt.feedback}</p>
+                      <div className="flex gap-3 mt-4 pt-4" style={{ borderTop: "1px solid var(--dash-border-1)" }}>
+                        <button onClick={handleGetModel} disabled={loading || showAnswer}
+                          className="flex items-center gap-2 h-10 px-4 rounded-xl text-[12px] font-semibold"
+                          style={{ background: "var(--dash-surface-2)", border: "1px solid var(--dash-border-1)", color: "var(--dash-amber)" }}>
+                          <Lightbulb size={14} /> Show Model Answer
+                        </button>
+                        <button onClick={handleGenerate} disabled={loading}
+                          className="flex items-center gap-2 h-10 px-4 rounded-xl text-[12px] font-semibold text-white ml-auto"
+                          style={{ background: "var(--dash-accent)" }}>
+                          <RotateCcw size={14} /> Next Question
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Model answer */}
+                {showAnswer && modelAnswer && (
+                  <div className="rounded-[14px] p-5 animate-in slide-in-from-top-3 duration-400" style={{ background: "rgba(108,99,255,0.06)", border: "1px solid rgba(108,99,255,0.20)" }}>
+                    <p className="text-[11px] font-black uppercase tracking-widest mb-3" style={{ color: "var(--dash-accent)" }}>◆ Professional Reference Answer</p>
+                    <p className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{ color: "var(--dash-text-2)" }}>{modelAnswer}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </main>
+        </div>
       </div>
     </div>
-  )
-}
-
-function ArrowRight(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M5 12h14" />
-      <path d="m12 5 7 7-7 7" />
-    </svg>
   )
 }

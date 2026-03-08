@@ -7,7 +7,7 @@ export function Navbar() {
       <Link href="/" className="flex items-center gap-2">
         <span className="text-xl font-bold tracking-tighter gradient-text">SUPERNOVA</span>
       </Link>
-      
+
       <div className="hidden md:flex items-center gap-8 text-sm font-medium text-[#8A8AA0]">
         <Link href="/features" className="hover:text-[#EEEEF5] transition-colors">Features</Link>
         <Link href="/pricing" className="hover:text-[#EEEEF5] transition-colors">Pricing</Link>

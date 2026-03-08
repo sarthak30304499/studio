@@ -1,153 +1,380 @@
 "use client"
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Bell, Search, Zap, ArrowRight, TrendingUp, Users, Target, Clock, FileText, Briefcase, MessageSquare, LayoutDashboard } from "lucide-react";
+import { useEffect, useState, useCallback } from "react"
+import Link from "next/link"
+import { useAuth } from "@/lib/supabase/auth-provider"
+import { getDashboardStats, getActivity, getTopJobMatches, relativeTime, getAvatarColor, type ActivityItem, type JobMatch } from "@/lib/supabase/db"
+import { Bell, Zap, Target, Users, TrendingUp, FileText, Briefcase, MessageSquare, GraduationCap, LineChart, ArrowRight } from "lucide-react"
+
+function getGreeting() {
+  const h = new Date().getHours()
+  if (h < 12) return "Good morning"
+  if (h < 17) return "Good afternoon"
+  return "Good evening"
+}
+
+function getLiveDate() {
+  return new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })
+}
+
+function SkeletonBlock({ className = "" }: { className?: string }) {
+  return <div className={`rounded-xl animate-pulse ${className}`} style={{ background: "var(--dash-surface-2)" }} />
+}
+
+function TrendChip({ value, suffix = "" }: { value: number | null; suffix?: string }) {
+  if (value === null) return null
+  const positive = value >= 0
+  return (
+    <span
+      className="text-[11px] font-black px-2 py-0.5 rounded-full"
+      style={{ background: positive ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)", color: positive ? "var(--dash-green)" : "var(--dash-red)" }}
+    >
+      {positive ? "↑" : "↓"} {Math.abs(value)}{suffix}
+    </span>
+  )
+}
+
+const TOOL_CONFIG = [
+  { name: "Resume Analyzer", desc: "ATS scoring & keyword analysis", icon: FileText, url: "/app/resume", color: "#6C63FF", statKey: "ats" },
+  { name: "Job Matcher", desc: "Semantic job discovery", icon: Briefcase, url: "/app/jobs", color: "#10B981", statKey: "jobs" },
+  { name: "Interview Prep", desc: "AI interview coaching", icon: MessageSquare, url: "/app/interview", color: "#F59E0B", statKey: "attempts" },
+  { name: "Higher Education", desc: "Exam & university roadmaps", icon: GraduationCap, url: "/app/higher-ed", color: "#3B82F6", statKey: "higher" },
+  { name: "Career Intelligence", desc: "Skill gaps & market radar", icon: LineChart, url: "/app/career", color: "#8B5CF6", statKey: "career" },
+]
+
+const TOOL_ACTIVITY_COLORS: Record<string, string> = {
+  resume: "#6C63FF", jobs: "#10B981", interview: "#F59E0B", "higher-ed": "#3B82F6", career: "#8B5CF6"
+}
 
 export default function Dashboard() {
-  const stats = [
-    { label: "ATS Score", value: "82", trend: "+4%", icon: Zap },
-    { label: "Jobs Matched", value: "24", trend: "+12", icon: Target },
-    { label: "Practice Sessions", value: "15", trend: "+3", icon: Users },
-    { label: "Profile Health", value: "90%", trend: "+5%", icon: TrendingUp },
-  ];
+  const { user, profile } = useAuth()
+  const [stats, setStats] = useState<any>(null)
+  const [activity, setActivity] = useState<ActivityItem[]>([])
+  const [topJobs, setTopJobs] = useState<JobMatch[]>([])
+  const [loading, setLoading] = useState(true)
+  const [unseenCount, setUnseenCount] = useState(0)
 
-  const tools = [
-    { name: "Resume Analyzer", desc: "Enterprise-grade ATS feedback and scoring.", status: "Active" },
-    { name: "Job Matcher", desc: "Personalized semantic matching for global roles.", status: "Active" },
-    { name: "Interview Prep", desc: "Realistic AI interview practice and STAR feedback.", status: "Active" },
-    { name: "Education Roadmaps", desc: "Plan your higher education and higher-ed journey.", status: "New" },
-    { name: "Career Radar", desc: "Skill gap analysis and market intelligence.", status: "Active" },
-    { name: "Action Plan", desc: "Your tailored 90-day professional strategy.", status: "Soon" },
-  ];
+  const firstName = profile?.full_name?.split(" ")[0]
+    ?? user?.user_metadata?.full_name?.split(" ")[0]
+    ?? user?.email?.split("@")[0]
+    ?? "there"
+
+  const loadData = useCallback(async () => {
+    if (!user?.id) return
+    setLoading(true)
+    try {
+      const [s, a, j] = await Promise.all([
+        getDashboardStats(user.id),
+        getActivity(user.id, 20),
+        getTopJobMatches(user.id, 3),
+      ])
+      setStats(s)
+      setActivity(a)
+      setTopJobs(j)
+      setUnseenCount(a.filter(x => !x.seen).length)
+    } finally {
+      setLoading(false)
+    }
+  }, [user?.id])
+
+  useEffect(() => { loadData() }, [loadData])
+
+  const STAT_CARDS = [
+    {
+      label: "Latest ATS Score",
+      value: stats?.atsScore != null ? `${stats.atsScore}` : "—",
+      subtext: stats?.atsScore != null ? "ATS compatibility" : "No resume analyzed yet",
+      icon: Zap,
+      color: "#6C63FF",
+      trend: stats?.atsTrend,
+      trendSuffix: " pts",
+      scoreColor: stats?.atsScore != null
+        ? stats.atsScore >= 80 ? "var(--dash-green)" : stats.atsScore >= 50 ? "var(--dash-amber)" : "var(--dash-red)"
+        : "var(--dash-text-2)"
+    },
+    {
+      label: "Jobs Matched",
+      value: stats?.jobTotal ?? "—",
+      subtext: stats?.jobTotal === 0 ? "Upload resume to match jobs" : "Total matches found",
+      icon: Target,
+      color: "#10B981",
+      trend: stats?.jobTrend,
+      trendSuffix: " this week",
+    },
+    {
+      label: "Questions Practiced",
+      value: stats?.attemptTotal ?? "—",
+      subtext: stats?.attemptTotal === 0 ? "Start your first session" : "Interview attempts",
+      icon: Users,
+      color: "#F59E0B",
+      trend: stats?.attemptTrend,
+      trendSuffix: " this week",
+    },
+    {
+      label: "Profile Completion",
+      value: stats?.profileCompletion != null ? `${stats.profileCompletion}%` : "—",
+      subtext: "Complete for better matches",
+      icon: TrendingUp,
+      color: "#8B5CF6",
+      trend: null,
+    },
+  ]
 
   return (
-    <div className="p-6 md:p-12 max-w-7xl mx-auto space-y-16 animate-in fade-in duration-500">
-      {/* Header - Clean Symmetry */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
-        <div className="space-y-1">
-          <h2 className="text-4xl font-black tracking-tighter">Good morning, John.</h2>
-          <p className="text-label">Monday, October 27, 2025</p>
-        </div>
-        <div className="flex items-center gap-4 w-full md:w-auto">
-           <div className="flex items-center bg-card border border-border px-5 h-12 rounded-2xl flex-1 md:min-w-[340px] focus-within:ring-2 ring-primary/20 transition-all">
-              <Search size={16} className="text-muted-foreground" />
-              <input className="bg-transparent border-none outline-none text-sm px-3 text-foreground placeholder-muted-foreground w-full font-medium" placeholder="Search tools or resources..." />
-           </div>
-           <Button size="icon" variant="outline" className="h-12 w-12 border-border bg-card relative group hover:border-primary transition-all">
-              <Bell size={18} />
-              <span className="absolute top-3.5 right-3.5 w-2 h-2 bg-primary rounded-full ring-4 ring-background group-hover:scale-125 transition-transform" />
-           </Button>
-        </div>
-      </header>
+    <div className="min-h-screen" style={{ background: "var(--dash-bg)" }}>
+      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
 
-      {/* Stats Grid - Perfect Alignment */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-        {stats.map((stat, i) => (
-          <Card key={i} className="bg-card border-border card-hover-effect overflow-hidden">
-            <CardContent className="p-8">
-              <div className="flex justify-between items-start mb-8">
-                <div className="p-4 bg-primary/10 rounded-2xl">
-                  <stat.icon size={20} className="text-primary" />
+        {/* Top Bar */}
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-[26px] font-black tracking-tight" style={{ color: "var(--dash-text-1)" }}>
+              {getGreeting()}, {firstName}.
+            </h1>
+            <p className="text-[13px] mt-0.5" style={{ color: "var(--dash-text-2)" }}>{getLiveDate()}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              className="relative w-10 h-10 rounded-xl flex items-center justify-center transition-all"
+              style={{ background: "var(--dash-surface-1)", border: "1px solid var(--dash-border-1)" }}
+            >
+              <Bell size={17} style={{ color: "var(--dash-text-2)" }} />
+              {unseenCount > 0 && (
+                <span className="absolute top-2 right-2.5 w-1.5 h-1.5 rounded-full" style={{ background: "var(--dash-accent)" }} />
+              )}
+            </button>
+            <Link href="/app/resume">
+              <button
+                className="h-10 px-5 rounded-xl text-[13px] font-semibold text-white transition-all"
+                style={{ background: "var(--dash-accent)" }}
+              >
+                New Analysis
+              </button>
+            </Link>
+          </div>
+        </header>
+
+        {/* Stats Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {STAT_CARDS.map((card, i) => (
+            <div
+              key={i}
+              className="rounded-[14px] p-6 transition-all duration-200"
+              style={{ background: "var(--dash-surface-1)", border: "1px solid var(--dash-border-1)" }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = "var(--dash-border-2)"
+                e.currentTarget.style.transform = "translateY(-1px)"
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = "var(--dash-border-1)"
+                e.currentTarget.style.transform = "translateY(0)"
+              }}
+            >
+              {loading ? (
+                <div className="space-y-3">
+                  <SkeletonBlock className="h-8 w-8" />
+                  <SkeletonBlock className="h-10 w-3/4" />
+                  <SkeletonBlock className="h-4 w-full" />
                 </div>
-                <Badge variant="secondary" className="bg-primary/10 text-primary border-none text-[10px] font-black tracking-tight px-3 py-1">
-                  {stat.trend}
-                </Badge>
-              </div>
-              <p className="text-label mb-2">{stat.label}</p>
-              <h3 className="text-5xl font-black tracking-tighter">{stat.value}</h3>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <div className="grid lg:grid-cols-12 gap-12">
-        {/* Workspace - Tools Grid */}
-        <div className="lg:col-span-8 space-y-12">
-          <section>
-             <h3 className="text-title mb-8">Intelligence Workspace</h3>
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {tools.map((tool, i) => (
-                  <Card key={i} className="bg-card border-border group card-hover-effect relative overflow-hidden">
-                    <CardContent className="p-8 flex flex-col h-full">
-                      <div className="flex justify-between items-start mb-8">
-                         <div className="p-3.5 bg-muted rounded-2xl group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300">
-                           <Zap size={20} />
-                         </div>
-                         <Badge variant="secondary" className={`${tool.status === 'New' ? 'bg-accent text-accent-foreground' : tool.status === 'Soon' ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary'} text-[9px] font-black border-none uppercase tracking-widest px-2.5 py-1`}>
-                           {tool.status}
-                         </Badge>
-                      </div>
-                      <h4 className="text-lg font-black tracking-tight">{tool.name}</h4>
-                      <p className="text-xs text-muted-foreground mt-3 mb-10 leading-relaxed font-medium line-clamp-2">{tool.desc}</p>
-                      <div className="mt-auto">
-                        <Button variant="link" className="p-0 h-auto text-primary hover:text-primary/80 text-[10px] font-black group items-center uppercase tracking-widest">
-                           Launch Tool <ArrowRight size={12} className="ml-2 group-hover:translate-x-1 transition-transform" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-             </div>
-          </section>
-
-          {/* AI CTA Card */}
-          <Card className="bg-card border-border border-l-[6px] border-l-primary relative overflow-hidden group">
-            <CardContent className="p-12">
-               <div className="absolute -top-12 -right-12 p-12 opacity-5 group-hover:opacity-10 transition-opacity">
-                 <Zap size={200} className="text-primary" />
-               </div>
-               <h3 className="text-title mb-6">Deep Career Insight</h3>
-               <p className="text-muted-foreground leading-relaxed max-w-2xl text-base font-medium">
-                 "Based on current market trends and your recent resume scan, adding <strong>'System Scalability'</strong> and <strong>'Distributed Computing'</strong> could increase your relevance for Top 10 matching roles by roughly <strong>14%</strong>."
-               </p>
-               <Button className="mt-10 bg-primary hover:bg-primary/90 text-primary-foreground font-black text-xs uppercase tracking-widest h-14 px-10 rounded-2xl shadow-xl shadow-primary/10">
-                 Optimize Profile Now
-               </Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Sidebar Log & Streak */}
-        <div className="lg:col-span-4 space-y-12">
-           <Card className="bg-card border-border">
-             <CardHeader className="p-10 pb-4">
-                <CardTitle className="text-title">Recent Activity</CardTitle>
-             </CardHeader>
-             <CardContent className="p-10 space-y-10">
-                {[
-                  { action: "Resume Scanned", time: "2h ago", icon: FileText },
-                  { action: "Job Matched: Senior Dev", time: "5h ago", icon: Briefcase },
-                  { action: "Practiced Q&A Session", time: "1d ago", icon: MessageSquare },
-                  { action: "Profile Updated", time: "2d ago", icon: LayoutDashboard },
-                ].map((item, i) => (
-                  <div key={i} className="flex gap-5 items-start">
-                     <div className="p-3.5 bg-muted rounded-2xl border border-border">
-                        <item.icon size={16} className="text-muted-foreground" />
-                     </div>
-                     <div className="flex-1 space-y-1">
-                        <p className="text-sm font-black text-foreground truncate">{item.action}</p>
-                        <p className="text-label tracking-widest">{item.time}</p>
-                     </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${card.color}18` }}>
+                      <card.icon size={17} style={{ color: card.color }} />
+                    </div>
+                    <TrendChip value={card.trend} suffix={card.trendSuffix} />
                   </div>
-                ))}
-                <Button variant="ghost" className="w-full text-primary hover:bg-primary/5 text-[10px] font-black h-12 uppercase tracking-widest">View All Logged Data</Button>
-             </CardContent>
-           </Card>
+                  <p
+                    className="text-[42px] font-black leading-none tabular-nums"
+                    style={{ color: (card as any).scoreColor ?? "var(--dash-text-1)", fontFeatureSettings: '"tnum"' }}
+                  >
+                    {card.value}
+                  </p>
+                  <p className="text-[12px] mt-1.5" style={{ color: "var(--dash-text-2)" }}>{card.label}</p>
+                  <p className="text-[11px] mt-0.5" style={{ color: "var(--dash-text-3)" }}>{card.subtext}</p>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
 
-           <Card className="bg-card border-border bg-[radial-gradient(circle_at_100%_0%,rgba(251,191,36,0.05),transparent_50%)]">
-             <CardContent className="p-12 text-center">
-                <div className="w-20 h-20 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-8 border border-accent/20">
-                   <Clock className="text-accent" size={32} />
-                </div>
-                <h4 className="text-label mb-3">Practice Streak</h4>
-                <p className="text-6xl font-black mb-4 tracking-tighter">5 Days</p>
-                <p className="text-[11px] text-muted-foreground font-bold leading-relaxed uppercase tracking-widest">Top 5% Global Activity Rank</p>
-             </CardContent>
-           </Card>
+        {/* Main 2-col layout */}
+        <div className="grid lg:grid-cols-12 gap-6">
+          {/* Left: Tools + Jobs */}
+          <div className="lg:col-span-8 space-y-6">
+            {/* Tool Cards Grid */}
+            <section>
+              <h2 className="text-[12px] font-black uppercase tracking-widest mb-4" style={{ color: "var(--dash-text-2)" }}>
+                Intelligence Suite
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {TOOL_CONFIG.map((tool, i) => {
+                  let miniStat = ""
+                  if (tool.statKey === "ats") miniStat = stats?.atsScore != null ? `Last score: ${stats.atsScore}` : "No analysis yet"
+                  else if (tool.statKey === "jobs") miniStat = stats?.jobTotal != null ? `${stats.jobTotal} matches found` : "No matches yet"
+                  else if (tool.statKey === "attempts") miniStat = stats?.attemptTotal != null ? `${stats.attemptTotal} questions practiced` : "No sessions yet"
+                  else if (tool.statKey === "higher") miniStat = "Build your roadmap"
+                  else if (tool.statKey === "career") miniStat = "Generate career report"
+                  return (
+                    <Link href={tool.url} key={i}>
+                      <div
+                        className="rounded-[16px] p-6 cursor-pointer transition-all duration-200 group"
+                        style={{ background: "var(--dash-surface-1)", border: "1px solid var(--dash-border-1)" }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = "var(--dash-border-accent)"
+                          e.currentTarget.style.transform = "translateY(-3px)"
+                          e.currentTarget.style.boxShadow = "0 8px 32px rgba(108,99,255,0.12)"
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = "var(--dash-border-1)"
+                          e.currentTarget.style.transform = "translateY(0)"
+                          e.currentTarget.style.boxShadow = "none"
+                        }}
+                      >
+                        <div className="w-11 h-11 rounded-[10px] flex items-center justify-center mb-4" style={{ background: `${tool.color}1a` }}>
+                          <tool.icon size={20} style={{ color: tool.color }} />
+                        </div>
+                        <h3 className="text-[15px] font-semibold mb-1" style={{ color: "var(--dash-text-1)" }}>{tool.name}</h3>
+                        <p className="text-[12px] mb-3" style={{ color: "var(--dash-text-2)" }}>{tool.desc}</p>
+                        {loading ? (
+                          <SkeletonBlock className="h-4 w-2/3" />
+                        ) : (
+                          <p className="text-[12px] font-semibold" style={{ color: tool.color }}>{miniStat}</p>
+                        )}
+                        <div className="flex items-center gap-1 mt-3 text-[12px] font-semibold" style={{ color: "var(--dash-accent)" }}>
+                          Open Tool <ArrowRight size={12} />
+                        </div>
+                      </div>
+                    </Link>
+                  )
+                })}
+              </div>
+            </section>
+
+            {/* Top Job Matches */}
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-[12px] font-black uppercase tracking-widest" style={{ color: "var(--dash-text-2)" }}>
+                  Your Top Job Matches
+                </h2>
+                <Link href="/app/jobs" className="text-[12px] font-semibold" style={{ color: "var(--dash-accent)" }}>View all →</Link>
+              </div>
+              <div
+                className="rounded-[14px] overflow-hidden divide-y"
+                style={{ background: "var(--dash-surface-1)", border: "1px solid var(--dash-border-1)", divideColor: "var(--dash-border-1)" }}
+              >
+                {loading ? (
+                  [1, 2, 3].map(i => (
+                    <div key={i} className="p-4 flex items-center gap-3">
+                      <SkeletonBlock className="w-9 h-9 rounded-full" />
+                      <div className="flex-1 space-y-2"><SkeletonBlock className="h-4 w-1/2" /><SkeletonBlock className="h-3 w-1/3" /></div>
+                      <SkeletonBlock className="h-6 w-12 rounded-full" />
+                    </div>
+                  ))
+                ) : topJobs.length === 0 ? (
+                  <div className="py-10 text-center">
+                    <p className="text-[13px] font-medium mb-2" style={{ color: "var(--dash-text-2)" }}>No job matches yet</p>
+                    <Link href="/app/resume">
+                      <button className="text-[12px] font-semibold" style={{ color: "var(--dash-accent)" }}>Upload resume to generate matches →</button>
+                    </Link>
+                  </div>
+                ) : (
+                  topJobs.map((job, i) => {
+                    const initLetter = (job.company_name ?? "?")[0].toUpperCase()
+                    const color = getAvatarColor(job.id)
+                    return (
+                      <div key={i} className="p-4 flex items-center gap-3 hover:bg-[var(--dash-surface-3)] transition-colors cursor-pointer">
+                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[13px] font-black flex-shrink-0" style={{ background: color }}>
+                          {initLetter}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[14px] font-semibold truncate" style={{ color: "var(--dash-text-1)" }}>{job.job_title}</p>
+                          <p className="text-[12px] truncate" style={{ color: "var(--dash-text-2)" }}>{job.company_name}{job.location ? ` · ${job.location}` : ""}</p>
+                        </div>
+                        {job.match_percent != null && (
+                          <span className="text-[11px] font-black px-2.5 py-1 rounded-full flex-shrink-0" style={{ background: "rgba(16,185,129,0.15)", color: "var(--dash-green)" }}>
+                            {job.match_percent}%
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </section>
+          </div>
+
+          {/* Right: Activity + AI Insight */}
+          <div className="lg:col-span-4 space-y-5">
+            {/* Activity Feed */}
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-[12px] font-black uppercase tracking-widest" style={{ color: "var(--dash-text-2)" }}>Recent Activity</h2>
+              </div>
+              <div className="rounded-[14px] overflow-hidden" style={{ background: "var(--dash-surface-1)", border: "1px solid var(--dash-border-1)" }}>
+                {loading ? (
+                  <div className="p-4 space-y-4">
+                    {[1, 2, 3, 4].map(i => (
+                      <div key={i} className="flex items-start gap-3">
+                        <SkeletonBlock className="w-2.5 h-2.5 rounded-full mt-1" />
+                        <div className="flex-1 space-y-1.5"><SkeletonBlock className="h-3 w-4/5" /><SkeletonBlock className="h-2.5 w-1/3" /></div>
+                      </div>
+                    ))}
+                  </div>
+                ) : activity.length === 0 ? (
+                  <div className="py-12 px-6 text-center">
+                    <div className="w-10 h-10 rounded-xl mx-auto mb-3 flex items-center justify-center" style={{ background: "var(--dash-surface-2)" }}>
+                      <Zap size={18} style={{ color: "var(--dash-text-3)" }} />
+                    </div>
+                    <p className="text-[13px] font-medium mb-1" style={{ color: "var(--dash-text-2)" }}>No activity yet</p>
+                    <p className="text-[11px]" style={{ color: "var(--dash-text-3)" }}>Your activity will appear here as you use SUPERNOVA's tools.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y" style={{ borderColor: "var(--dash-border-1)" }}>
+                    {activity.slice(0, 12).map((item, i) => {
+                      const dotColor = TOOL_ACTIVITY_COLORS[item.tool] ?? "var(--dash-accent)"
+                      return (
+                        <div key={i} className="flex items-start gap-3 px-4 py-3">
+                          <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ background: dotColor }} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] leading-snug" style={{ color: "var(--dash-text-1)" }}>{item.action}</p>
+                            <p className="text-[11px] mt-0.5 font-mono-data" style={{ color: "var(--dash-text-3)" }}>{relativeTime(item.created_at)}</p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* AI Insight Card */}
+            <div
+              className="rounded-[14px] p-5"
+              style={{ background: "linear-gradient(135deg, rgba(108,99,255,0.10), rgba(167,139,250,0.05))", border: "1px solid rgba(108,99,255,0.20)" }}
+            >
+              <p className="text-[10px] font-black uppercase tracking-widest mb-2" style={{ color: "var(--dash-accent)" }}>◆ AI Insight</p>
+              {loading ? (
+                <div className="space-y-2"><SkeletonBlock className="h-3 w-full" /><SkeletonBlock className="h-3 w-5/6" /><SkeletonBlock className="h-3 w-4/5" /></div>
+              ) : (
+                <>
+                  <p className="text-[13px] leading-relaxed" style={{ color: "var(--dash-text-2)" }}>
+                    {stats?.atsScore != null
+                      ? `Your current ATS score of ${stats.atsScore} puts you ${stats.atsScore >= 80 ? "in the top tier" : "below the competitive threshold"}. ${stats.atsScore < 80 ? "Improving keyword alignment and formatting could push you past 80 — the threshold for most ATS systems." : "Focus on quantifying achievements with metrics to stand out further."}`
+                      : stats?.jobTotal > 0
+                        ? `You have ${stats.jobTotal} job matches ready to review. Apply to your top 3 matches this week to maximize your response rate.`
+                        : "Upload your resume to unlock AI-powered ATS scoring, job matching, and personalized career insights tailored to your profile."}
+                  </p>
+                  <Link href={stats?.atsScore != null ? "/app/resume" : "/app/resume"}>
+                    <button className="text-[12px] font-semibold mt-3" style={{ color: "var(--dash-accent)" }}>
+                      Take Action →
+                    </button>
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
-  );
+  )
 }

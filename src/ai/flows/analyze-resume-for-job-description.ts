@@ -1,70 +1,81 @@
 'use server';
-/**
- * @fileOverview An AI agent that analyzes a user's resume against a target job description,
- * providing an ATS compatibility score and actionable improvement suggestions.
- *
- * - analyzeResumeForJob - A function that handles the resume analysis process.
- * - AnalyzeResumeForJobInput - The input type for the analyzeResumeForJob function.
- * - AnalyzeResumeForJobOutput - The return type for the analyzeResumeForJob function.
- */
 
-import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import insforge from '@/lib/insforge/client'
 
-const SuggestionSchema = z.object({
-  severity: z.enum(['Critical', 'Important', 'Suggested']).describe('The severity of the suggestion: Critical, Important, or Suggested.'),
-  headline: z.string().describe('A concise summary of the suggestion.'),
-  explanation: z.string().describe('A detailed explanation of how to implement the suggestion and why it is important.'),
-  estimatedImpact: z.string().describe('An estimated impact on the ATS score, e.g., "Could improve score by +5 pts".'),
-});
-
-const AnalyzeResumeForJobInputSchema = z.object({
-  resumeDataUri: z
-    .string()
-    .describe(
-      "The user's resume document, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
-    ),
-  jobDescription: z.string().describe('The full text of the target job description.'),
-  targetRole: z.string().describe('The specific role the user is targeting, e.g., "Product Manager" or "Software Engineer".'),
-});
-export type AnalyzeResumeForJobInput = z.infer<typeof AnalyzeResumeForJobInputSchema>;
-
-const AnalyzeResumeForJobOutputSchema = z.object({
-  atsScore: z.number().min(0).max(100).describe('An ATS (Applicant Tracking System) compatibility score for the resume against the job description (0-100).'),
-  suggestions: z.array(SuggestionSchema).describe('A list of actionable suggestions to improve the resume for the target role.'),
-});
-export type AnalyzeResumeForJobOutput = z.infer<typeof AnalyzeResumeForJobOutputSchema>;
-
-export async function analyzeResumeForJob(input: AnalyzeResumeForJobInput): Promise<AnalyzeResumeForJobOutput> {
-  return analyzeResumeForJobFlow(input);
+export interface AnalyzeResumeForJobInput {
+  resumeDataUri: string
+  jobDescription: string
+  targetRole: string
 }
 
-const analyzeResumeForJobPrompt = ai.definePrompt({
-  name: 'analyzeResumeForJobPrompt',
-  input: { schema: AnalyzeResumeForJobInputSchema },
-  output: { schema: AnalyzeResumeForJobOutputSchema },
-  prompt: `You are an expert ATS (Applicant Tracking System) and career coach. Your task is to analyze a given resume against a specific job description and target role.
+export interface AnalyzeResumeForJobOutput {
+  atsScore: number
+  suggestions: Array<{
+    severity: 'Critical' | 'Important' | 'Suggested'
+    headline: string
+    explanation: string
+    estimatedImpact: string
+  }>
+}
 
-Your goal is to provide a comprehensive ATS compatibility score (out of 100) and actionable, highly specific suggestions to improve the resume for that particular role.
+export async function analyzeResumeForJob(input: AnalyzeResumeForJobInput): Promise<AnalyzeResumeForJobOutput> {
+  const { resumeDataUri, jobDescription, targetRole } = input
 
-Analyze the resume carefully for keywords, formatting, structure, and relevance to the job description. Identify what is missing or could be better articulated to maximize ATS parsability and recruiter appeal.
+  const prompt = `You are an expert ATS (Applicant Tracking System) and career coach. Analyze the provided resume against the job description and target role.
 
-Provide the ATS compatibility score as a number between 0 and 100. Then, generate a list of suggestions. Each suggestion must include a 'severity' (Critical, Important, or Suggested), a 'headline' summarizing the suggestion, a detailed 'explanation' of what to do and why, and an 'estimatedImpact' on the score if implemented.
+Provide:
+1. An ATS compatibility score (0-100)
+2. A list of specific, actionable suggestions
 
-Target Role: {{{targetRole}}}
-Job Description: {{{jobDescription}}}
-Resume: {{media url=resumeDataUri}}
-`,
-});
+Target Role: ${targetRole}
+Job Description: ${jobDescription}
 
-const analyzeResumeForJobFlow = ai.defineFlow(
-  {
-    name: 'analyzeResumeForJobFlow',
-    inputSchema: AnalyzeResumeForJobInputSchema,
-    outputSchema: AnalyzeResumeForJobOutputSchema,
-  },
-  async (input) => {
-    const { output } = await analyzeResumeForJobPrompt(input);
-    return output!;
+Respond ONLY with valid JSON in this exact format (no markdown, no extra text):
+{
+  "atsScore": <number 0-100>,
+  "suggestions": [
+    {
+      "severity": "Critical" | "Important" | "Suggested",
+      "headline": "<concise summary>",
+      "explanation": "<detailed explanation of what to do and why>",
+      "estimatedImpact": "<e.g. Could improve score by +5 pts>"
+    }
+  ]
+}`
+
+  const completion = await insforge.ai.chat.completions.create({
+    model: 'openai/gpt-4o-mini',
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          {
+            type: 'file',
+            file: {
+              filename: 'resume.pdf',
+              file_data: resumeDataUri,
+            },
+          } as any,
+        ],
+      },
+    ],
+    fileParser: { enabled: true },
+  })
+
+  const content = completion.choices[0].message.content
+
+  // Parse JSON response
+  const jsonMatch = content.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) {
+    throw new Error('AI returned invalid response format')
   }
-);
+
+  const result = JSON.parse(jsonMatch[0]) as AnalyzeResumeForJobOutput
+
+  // Validate and clamp score
+  result.atsScore = Math.max(0, Math.min(100, Math.round(result.atsScore)))
+  if (!Array.isArray(result.suggestions)) result.suggestions = []
+
+  return result
+}

@@ -1,185 +1,288 @@
 "use client"
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Slider } from "@/components/ui/slider";
-import { Search, Briefcase, MapPin, Building, ChevronRight, X, Filter, Sparkles } from "lucide-react";
+import { useState, useEffect, useCallback } from "react"
+import { useAuth } from "@/lib/supabase/auth-provider"
+import { getJobMatches, toggleSaveJob, toggleApplyJob, logActivity, getAvatarColor, type JobMatch } from "@/lib/supabase/db"
+import { Search, Briefcase, MapPin, Building, Bookmark, BookmarkCheck, ExternalLink, X, Filter } from "lucide-react"
+import Link from "next/link"
 
-export default function JobMatcher() {
-  const [showFilters, setShowFilters] = useState(false);
-  
-  const jobs = [
-    { title: "Senior Product Manager", company: "Google", location: "Remote", type: "Full-Time", exp: "Senior", industry: "Tech", match: 94, date: "2d ago" },
-    { title: "Technical Project Lead", company: "Stripe", location: "New York, NY", type: "Full-Time", exp: "Senior", industry: "Fintech", match: 88, date: "3d ago" },
-    { title: "Growth Marketing Manager", company: "Meta", location: "Menlo Park, CA", type: "Contract", exp: "Mid", industry: "Tech", match: 81, date: "5d ago" },
-    { title: "Strategy Consultant", company: "McKinsey", location: "London, UK", type: "Full-Time", exp: "Mid", industry: "Consulting", match: 79, date: "1w ago" },
-  ];
+function SkeletonBlock({ className = "" }: { className?: string }) {
+   return <div className={`rounded-xl animate-pulse ${className}`} style={{ background: "var(--dash-surface-2)" }} />
+}
 
-  return (
-    <div className="flex flex-col h-screen bg-background overflow-hidden">
-      <header className="p-6 md:p-8 border-b border-border bg-card flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-black tracking-tight">Job Matcher</h1>
-          <div className="flex items-center gap-2 mt-1">
-             <span className="text-xs text-primary font-black">✓</span>
-             <span className="text-xs text-muted-foreground font-medium">Resume Active: <span className="text-foreground">JohnDoe_Senior_Dev.pdf</span></span>
-             <button className="text-[10px] text-primary font-black hover:underline uppercase tracking-widest ml-4 transition-all">Change</button>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 w-full md:w-auto">
-           <div className="flex items-center bg-background border border-border px-4 h-11 rounded-xl flex-1 md:w-[360px] focus-within:ring-2 ring-primary/20 transition-all">
-              <Search size={18} className="text-muted-foreground" />
-              <input className="bg-transparent border-none outline-none text-sm px-3 text-foreground placeholder-muted-foreground w-full" placeholder="Keywords, company, or role..." />
-           </div>
-           <Button onClick={() => setShowFilters(!showFilters)} variant="outline" className={`h-11 w-11 p-0 border-border bg-background md:hidden`}>
-              <Filter size={20} />
-           </Button>
-        </div>
-      </header>
+function MatchBadge({ pct }: { pct: number | null }) {
+   if (pct == null) return null
+   const color = pct >= 85 ? "var(--dash-green)" : pct >= 70 ? "var(--dash-amber)" : "var(--dash-text-2)"
+   return (
+      <span className="text-[11px] font-black px-2.5 py-1 rounded-full" style={{ background: `${color}1a`, color }}>
+         {pct}%
+      </span>
+   )
+}
 
-      <div className="flex flex-1 overflow-hidden relative">
-        {/* Sidebar Filters */}
-        <aside className={`fixed md:static inset-0 z-50 md:z-0 bg-card md:bg-transparent md:block w-full md:w-80 border-r border-border overflow-y-auto p-8 transform transition-transform duration-300 ease-in-out ${showFilters ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-           <div className="flex justify-between items-center md:hidden mb-10">
-             <h3 className="text-xl font-black uppercase tracking-tight">Filters</h3>
-             <Button variant="ghost" size="icon" onClick={() => setShowFilters(false)} className="h-10 w-10"><X size={24} /></Button>
-           </div>
-           
-           <div className="space-y-12">
-              <section className="space-y-6">
-                <h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">AI Match Sensitivity</h4>
-                <div className="space-y-4">
-                   <div className="flex justify-between text-xs font-bold">
-                      <span className="text-muted-foreground">Min 70%</span>
-                      <span className="text-primary">Optimized</span>
-                   </div>
-                   <Slider defaultValue={[70]} max={100} step={1} className="py-2" />
-                </div>
-              </section>
+export default function JobMatcherPage() {
+   const { user } = useAuth()
+   const [jobs, setJobs] = useState<JobMatch[]>([])
+   const [filtered, setFiltered] = useState<JobMatch[]>([])
+   const [loading, setLoading] = useState(true)
+   const [selected, setSelected] = useState<JobMatch | null>(null)
+   const [search, setSearch] = useState("")
+   const [showFilters, setShowFilters] = useState(false)
+   const [filters, setFilters] = useState({ types: [] as string[], minMatch: 0 })
 
-              <section className="space-y-6">
-                <h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">Job Modality</h4>
-                <div className="space-y-4">
-                   {['Full-Time', 'Part-Time', 'Internship', 'Contract', 'Remote'].map((type) => (
-                     <div key={type} className="flex items-center gap-3 group cursor-pointer">
-                        <Checkbox id={type} className="border-border data-[state=checked]:bg-primary h-5 w-5 rounded-md" />
-                        <label htmlFor={type} className="text-sm font-medium text-muted-foreground group-hover:text-foreground cursor-pointer transition-colors">{type}</label>
+   const loadJobs = useCallback(async () => {
+      if (!user?.id) return
+      setLoading(true)
+      try {
+         const data = await getJobMatches(user.id, 20)
+         setJobs(data)
+         setFiltered(data)
+      } finally {
+         setLoading(false)
+      }
+   }, [user?.id])
+
+   useEffect(() => { loadJobs() }, [loadJobs])
+
+   useEffect(() => {
+      let result = jobs
+      if (search.trim()) {
+         const q = search.toLowerCase()
+         result = result.filter(j => j.job_title.toLowerCase().includes(q) || (j.company_name ?? "").toLowerCase().includes(q))
+      }
+      if (filters.types.length > 0) result = result.filter(j => filters.types.includes(j.job_type ?? ""))
+      if (filters.minMatch > 0) result = result.filter(j => (j.match_percent ?? 0) >= filters.minMatch)
+      setFiltered(result)
+   }, [search, filters, jobs])
+
+   const handleSave = async (job: JobMatch) => {
+      const newSaved = !job.is_saved
+      setJobs(prev => prev.map(j => j.id === job.id ? { ...j, is_saved: newSaved } : j))
+      try {
+         await toggleSaveJob(user!.id, job.id, newSaved)
+         if (newSaved) await logActivity(user!.id, "jobs", `Saved job: ${job.job_title} at ${job.company_name}`)
+      } catch {
+         setJobs(prev => prev.map(j => j.id === job.id ? { ...j, is_saved: job.is_saved } : j))
+      }
+   }
+
+   const handleApply = async (job: JobMatch) => {
+      if (job.is_applied) return
+      setJobs(prev => prev.map(j => j.id === job.id ? { ...j, is_applied: true } : j))
+      try {
+         await toggleApplyJob(user!.id, job.id)
+         await logActivity(user!.id, "jobs", `Applied to ${job.job_title} at ${job.company_name}`)
+      } catch {
+         setJobs(prev => prev.map(j => j.id === job.id ? { ...j, is_applied: false } : j))
+      }
+   }
+
+   return (
+      <div className="flex flex-col min-h-screen" style={{ background: "var(--dash-bg)" }}>
+         {/* Header */}
+         <header className="px-6 py-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4" style={{ background: "var(--dash-surface-1)", borderBottom: "1px solid var(--dash-border-1)" }}>
+            <div>
+               <h1 className="text-[24px] font-black tracking-tight" style={{ color: "var(--dash-text-1)" }}>Job Matcher</h1>
+               {!loading && (
+                  <p className="text-[12px] mt-0.5" style={{ color: "var(--dash-text-2)" }}>
+                     {filtered.length} {filtered.length === 1 ? "match" : "matches"} found
+                  </p>
+               )}
+            </div>
+            <div className="flex items-center gap-3 w-full md:w-auto">
+               <div className="flex items-center h-10 px-4 rounded-xl flex-1 md:w-72 gap-2" style={{ background: "var(--dash-surface-2)", border: "1px solid var(--dash-border-1)" }}>
+                  <Search size={15} style={{ color: "var(--dash-text-3)" }} />
+                  <input
+                     className="bg-transparent outline-none text-[13px] flex-1"
+                     style={{ color: "var(--dash-text-1)" }}
+                     placeholder="Search role or company..."
+                     value={search}
+                     onChange={e => setSearch(e.target.value)}
+                  />
+               </div>
+               <button onClick={() => setShowFilters(!showFilters)} className="h-10 w-10 rounded-xl flex items-center justify-center md:hidden" style={{ background: "var(--dash-surface-2)", border: "1px solid var(--dash-border-1)" }}>
+                  <Filter size={16} style={{ color: "var(--dash-text-2)" }} />
+               </button>
+            </div>
+         </header>
+
+         <div className="flex flex-1 overflow-hidden">
+            {/* Filter Panel */}
+            <aside className={`w-64 flex-shrink-0 overflow-y-auto p-5 space-y-6 border-r md:block ${showFilters ? "fixed inset-0 z-50 w-full md:static md:w-64" : "hidden md:block"}`}
+               style={{ background: "var(--dash-surface-1)", borderColor: "var(--dash-border-1)" }}>
+               <div className="flex items-center justify-between">
+                  <p className="text-[12px] font-black uppercase tracking-widest" style={{ color: "var(--dash-text-2)" }}>Filters</p>
+                  <button onClick={() => setShowFilters(false)} className="md:hidden"><X size={18} style={{ color: "var(--dash-text-2)" }} /></button>
+               </div>
+
+               <div className="space-y-3">
+                  <p className="text-[10px] uppercase tracking-widest font-black" style={{ color: "var(--dash-text-3)" }}>Job Type</p>
+                  {["Full-Time", "Part-Time", "Contract", "Remote"].map(t => (
+                     <label key={t} className="flex items-center gap-2.5 cursor-pointer">
+                        <input type="checkbox" checked={filters.types.includes(t)} onChange={e => {
+                           setFilters(prev => ({ ...prev, types: e.target.checked ? [...prev.types, t] : prev.types.filter(x => x !== t) }))
+                        }} className="w-4 h-4 rounded" style={{ accentColor: "var(--dash-accent)" }} />
+                        <span className="text-[13px]" style={{ color: "var(--dash-text-2)" }}>{t}</span>
+                     </label>
+                  ))}
+               </div>
+
+               <div className="space-y-3">
+                  <p className="text-[10px] uppercase tracking-widest font-black" style={{ color: "var(--dash-text-3)" }}>Min Match Score</p>
+                  <input type="range" min={0} max={100} step={5} value={filters.minMatch}
+                     onChange={e => setFilters(prev => ({ ...prev, minMatch: +e.target.value }))}
+                     className="w-full" style={{ accentColor: "var(--dash-accent)" }} />
+                  <div className="flex justify-between text-[11px]">
+                     <span style={{ color: "var(--dash-text-3)" }}>Any</span>
+                     <span style={{ color: "var(--dash-accent)" }}>{filters.minMatch}%+</span>
+                  </div>
+               </div>
+
+               <button onClick={() => setFilters({ types: [], minMatch: 0 })} className="text-[12px] font-semibold w-full text-center" style={{ color: "var(--dash-accent)" }}>
+                  Reset Filters
+               </button>
+            </aside>
+
+            {/* Job List */}
+            <main className="flex-1 overflow-y-auto">
+               {loading ? (
+                  <div className="p-6 space-y-3">
+                     {[1, 2, 3, 4].map(i => <SkeletonBlock key={i} className="h-[88px]" />)}
+                  </div>
+               ) : filtered.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full py-24 text-center px-6">
+                     <svg width="64" height="64" viewBox="0 0 64 64" fill="none" className="mb-5 opacity-30">
+                        <circle cx="32" cy="32" r="28" stroke="#6C63FF" strokeWidth="2" />
+                        <path d="M22 32h20M32 22v20" stroke="#6C63FF" strokeWidth="2" strokeLinecap="round" />
+                     </svg>
+                     <p className="text-[18px] font-black mb-2" style={{ color: "var(--dash-text-1)" }}>No Job Matches Yet</p>
+                     <p className="text-[13px] max-w-xs" style={{ color: "var(--dash-text-2)" }}>Upload your resume to unlock AI-powered job matching tailored to your skills and experience.</p>
+                     <Link href="/app/resume">
+                        <button className="mt-5 h-10 px-6 rounded-xl text-[13px] font-semibold text-white" style={{ background: "var(--dash-accent)" }}>Upload Resume →</button>
+                     </Link>
+                  </div>
+               ) : (
+                  <div className="divide-y" style={{ borderColor: "var(--dash-border-1)" }}>
+                     {filtered.map((job) => {
+                        const initial = (job.company_name ?? "?")[0].toUpperCase()
+                        const color = getAvatarColor(job.id)
+                        const isActive = selected?.id === job.id
+                        return (
+                           <div
+                              key={job.id}
+                              className="flex items-center gap-4 px-5 py-4 cursor-pointer transition-all"
+                              style={{
+                                 background: isActive ? "var(--dash-surface-2)" : "transparent",
+                                 borderLeft: isActive ? "2.5px solid var(--dash-accent)" : "2.5px solid transparent"
+                              }}
+                              onClick={() => setSelected(job)}
+                           >
+                              <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[13px] font-black flex-shrink-0" style={{ background: color }}>{initial}</div>
+                              <div className="flex-1 min-w-0">
+                                 <p className="text-[14px] font-semibold truncate" style={{ color: "var(--dash-text-1)" }}>{job.job_title}</p>
+                                 <div className="flex items-center gap-2 mt-0.5">
+                                    <span className="text-[12px]" style={{ color: "var(--dash-text-2)" }}>{job.company_name}</span>
+                                    {job.location && <span className="text-[12px] flex items-center gap-1" style={{ color: "var(--dash-text-3)" }}><MapPin size={10} />{job.location}</span>}
+                                    {job.job_type && <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: "var(--dash-surface-2)", color: "var(--dash-text-3)" }}>{job.job_type}</span>}
+                                 </div>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                 <MatchBadge pct={job.match_percent} />
+                                 <button onClick={e => { e.stopPropagation(); handleSave(job) }} className="p-1.5 rounded-lg transition-colors" style={{ color: job.is_saved ? "var(--dash-accent)" : "var(--dash-text-3)" }}>
+                                    {job.is_saved ? <BookmarkCheck size={15} /> : <Bookmark size={15} />}
+                                 </button>
+                              </div>
+                           </div>
+                        )
+                     })}
+                  </div>
+               )}
+            </main>
+
+            {/* Detail Panel */}
+            {selected && (
+               <aside className="w-[420px] flex-shrink-0 overflow-y-auto border-l" style={{ background: "var(--dash-surface-1)", borderColor: "var(--dash-border-1)" }}>
+                  <div className="p-5 space-y-5">
+                     <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                           <h2 className="text-[20px] font-black" style={{ color: "var(--dash-text-1)" }}>{selected.job_title}</h2>
+                           <p className="text-[14px] mt-0.5" style={{ color: "var(--dash-text-2)" }}>{selected.company_name}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                           <MatchBadge pct={selected.match_percent} />
+                           <button onClick={() => setSelected(null)} style={{ color: "var(--dash-text-3)" }}><X size={18} /></button>
+                        </div>
                      </div>
-                   ))}
-                </div>
-              </section>
 
-              <section className="space-y-6">
-                <h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">Industry Verticals</h4>
-                <div className="flex flex-wrap gap-2.5">
-                   {['Tech', 'Finance', 'Health', 'Design', 'Marketing', 'Legal'].map((ind) => (
-                     <Badge key={ind} variant="outline" className="bg-muted border-border text-[10px] px-3 py-1 font-bold hover:border-primary hover:text-primary cursor-pointer transition-all">
-                        {ind}
-                     </Badge>
-                   ))}
-                </div>
-              </section>
-
-              <section className="space-y-6">
-                <h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">Experience Level</h4>
-                <div className="space-y-4">
-                   {['Entry', 'Mid', 'Senior', 'Executive'].map((level) => (
-                     <div key={level} className="flex items-center gap-3 group">
-                        <input type="radio" name="exp" id={level} className="accent-primary w-4 h-4" />
-                        <label htmlFor={level} className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-all">{level}</label>
+                     {/* Tags */}
+                     <div className="flex flex-wrap gap-2">
+                        {[selected.location, selected.job_type, selected.industry, selected.experience_level].filter(Boolean).map((t, i) => (
+                           <span key={i} className="text-[11px] px-2.5 py-1 rounded-full" style={{ background: "var(--dash-surface-2)", color: "var(--dash-text-2)" }}>{t}</span>
+                        ))}
                      </div>
-                   ))}
-                </div>
-              </section>
 
-              <div className="pt-6 space-y-4">
-                <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-black uppercase tracking-widest h-12 shadow-lg shadow-primary/10">
-                   Apply Filters
-                </Button>
-                <button className="w-full text-center text-[10px] font-black text-muted-foreground hover:text-foreground uppercase tracking-widest transition-colors">Reset All Parameters</button>
-              </div>
-           </div>
-        </aside>
+                     {/* Match reasons */}
+                     {(selected.match_reasons as string[])?.length > 0 && (
+                        <div className="rounded-xl p-4 space-y-2" style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.15)" }}>
+                           <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: "var(--dash-green)" }}>Why You Match</p>
+                           {(selected.match_reasons as string[]).map((r, i) => (
+                              <p key={i} className="text-[12px] flex items-start gap-1.5" style={{ color: "var(--dash-text-2)" }}><span style={{ color: "var(--dash-green)" }}>✓</span>{r}</p>
+                           ))}
+                        </div>
+                     )}
 
-        {/* Main Jobs Area */}
-        <main className="flex-1 overflow-y-auto p-6 md:p-10">
-          <div className="flex justify-between items-center mb-10">
-             <div className="flex items-center gap-3 text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-                <span className="text-primary">24 matches</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-border" />
-                <span>Sort: Best Fit</span>
-             </div>
-             <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="bg-card border-border text-[11px] font-bold h-9 px-4">List</Button>
-                <Button variant="outline" size="sm" className="bg-card border-border text-[11px] font-bold h-9 px-4 opacity-40">Grid</Button>
-             </div>
-          </div>
+                     {/* Description */}
+                     {selected.description && (
+                        <div>
+                           <p className="text-[10px] font-black uppercase tracking-widest mb-2" style={{ color: "var(--dash-text-3)" }}>Job Description</p>
+                           <p className="text-[13px] leading-relaxed" style={{ color: "var(--dash-text-2)" }}>{selected.description}</p>
+                        </div>
+                     )}
 
-          <div className="space-y-6">
-             {jobs.map((job, i) => (
-               <Card key={i} className="bg-card border-border card-hover-effect group relative overflow-hidden">
-                 {job.match > 90 && (
-                   <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                      <Sparkles size={120} className="text-primary" />
-                   </div>
-                 )}
-                 <CardContent className="p-8">
-                    <div className="flex flex-col md:flex-row justify-between gap-8">
-                       <div className="flex gap-6">
-                          <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-lg ${
-                            ['bg-primary', 'bg-accent', 'bg-destructive', 'bg-primary/80'][i % 4]
-                          }`}>
-                             {job.company[0]}
-                          </div>
-                          <div className="space-y-1">
-                             <div className="flex items-center gap-2 mb-1">
-                               <p className="text-sm font-bold text-muted-foreground">{job.company}</p>
-                               <span className="w-1 h-1 rounded-full bg-border" />
-                               <p className="text-[11px] font-bold text-muted-foreground uppercase">{job.date}</p>
-                             </div>
-                             <h4 className="text-2xl font-black tracking-tight group-hover:text-primary transition-colors">{job.title}</h4>
-                             <div className="flex flex-wrap gap-2.5 mt-5">
-                                <Badge variant="secondary" className="bg-muted text-foreground border-border text-[10px] font-bold h-7 px-3">
-                                   <MapPin size={12} className="mr-1.5 opacity-50" /> {job.location}
-                                </Badge>
-                                <Badge variant="secondary" className="bg-muted text-foreground border-border text-[10px] font-bold h-7 px-3">
-                                   <Briefcase size={12} className="mr-1.5 opacity-50" /> {job.type}
-                                </Badge>
-                                <Badge variant="secondary" className="bg-muted text-foreground border-border text-[10px] font-bold h-7 px-3">
-                                   <Building size={12} className="mr-1.5 opacity-50" /> {job.industry}
-                                </Badge>
-                             </div>
-                          </div>
-                       </div>
-                       <div className="flex flex-row md:flex-col justify-between items-end gap-3 min-w-[120px]">
-                          <div className="bg-primary/10 border border-primary/20 px-6 py-3 rounded-2xl text-center shadow-sm">
-                             <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-1">AI Rank</p>
-                             <p className="text-3xl font-black text-foreground tracking-tighter">{job.match}%</p>
-                          </div>
-                          <Button variant="ghost" className="h-11 text-primary hover:bg-primary/10 text-xs font-black group uppercase tracking-widest">
-                             Explore <ChevronRight size={16} className="ml-2 group-hover:translate-x-1.5 transition-transform" />
-                          </Button>
-                       </div>
-                    </div>
-                    <div className="mt-8 pt-8 border-t border-border">
-                       <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed font-medium">
-                         Strategic role for a visionary {job.title}. You will lead multi-disciplinary teams to define product roadmaps, 
-                         execute scaling strategies, and drive innovation within our core technology architecture...
-                       </p>
-                    </div>
-                 </CardContent>
-               </Card>
-             ))}
-          </div>
+                     {/* Requirements */}
+                     {(selected.requirements as string[])?.length > 0 && (
+                        <div>
+                           <p className="text-[10px] font-black uppercase tracking-widest mb-2" style={{ color: "var(--dash-text-3)" }}>Requirements</p>
+                           {(selected.requirements as string[]).map((r, i) => (
+                              <div key={i} className="flex items-start gap-2 mb-1.5">
+                                 <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: "var(--dash-accent)" }} />
+                                 <p className="text-[12px]" style={{ color: "var(--dash-text-2)" }}>{r}</p>
+                              </div>
+                           ))}
+                        </div>
+                     )}
 
-          <div className="mt-16 text-center">
-             <Button variant="outline" className="border-border bg-card text-muted-foreground font-black px-10 h-14 hover:border-primary hover:text-primary uppercase tracking-[0.2em]">Load More Opportunities</Button>
-          </div>
-        </main>
+                     {/* Empty description fallback */}
+                     {!selected.description && (selected.requirements as string[])?.length === 0 && (
+                        <p className="text-[13px] text-center py-6" style={{ color: "var(--dash-text-3)" }}>No additional details available for this job.</p>
+                     )}
+
+                     {/* Actions */}
+                     <div className="flex gap-3 pt-2 sticky bottom-0" style={{ background: "var(--dash-surface-1)" }}>
+                        <button
+                           onClick={() => handleSave(selected)}
+                           className="flex-1 h-11 rounded-xl text-[13px] font-semibold transition-colors flex items-center justify-center gap-1.5"
+                           style={{ background: "var(--dash-surface-2)", border: "1px solid var(--dash-border-1)", color: selected.is_saved ? "var(--dash-accent)" : "var(--dash-text-2)" }}
+                        >
+                           {selected.is_saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
+                           {selected.is_saved ? "Saved" : "Save Job"}
+                        </button>
+                        {selected.apply_url ? (
+                           <a href={selected.apply_url} target="_blank" rel="noreferrer" className="flex-1">
+                              <button onClick={() => handleApply(selected)} className="w-full h-11 rounded-xl text-[13px] font-semibold text-white flex items-center justify-center gap-1.5" style={{ background: "var(--dash-green)" }}>
+                                 Apply Now <ExternalLink size={13} />
+                              </button>
+                           </a>
+                        ) : (
+                           <button onClick={() => handleApply(selected)} className="flex-1 h-11 rounded-xl text-[13px] font-semibold text-white" style={{ background: selected.is_applied ? "var(--dash-surface-3)" : "var(--dash-green)", cursor: selected.is_applied ? "default" : "pointer" }}>
+                              {selected.is_applied ? "Applied ✓" : "Mark as Applied"}
+                           </button>
+                        )}
+                     </div>
+                  </div>
+               </aside>
+            )}
+         </div>
       </div>
-    </div>
-  );
+   )
 }

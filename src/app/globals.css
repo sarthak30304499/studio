@@ -2,6 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Dashboard Design Tokens ─────────────────────────────────── */
+:root {
+  --dash-bg: #060608;
+  --dash-surface-1: #0C0C14;
+  --dash-surface-2: #121220;
+  --dash-surface-3: #1A1A2E;
+  --dash-border-1: #1C1C2E;
+  --dash-border-2: #2A2A40;
+  --dash-border-accent: #6C63FF;
+  --dash-text-1: #F2F2F8;
+  --dash-text-2: #8888A8;
+  --dash-text-3: #3D3D58;
+  --dash-accent: #6C63FF;
+  --dash-accent-soft: rgba(108, 99, 255, 0.12);
+  --dash-green: #10B981;
+  --dash-amber: #F59E0B;
+  --dash-red: #EF4444;
+  --dash-gold: #F59E0B;
+}
+
+.font-mono-data {
+  font-family: 'JetBrains Mono', monospace;
+  font-feature-settings: "tnum";
+}
+
+.tabular-nums {
+  font-feature-settings: "tnum";
+}
+
 @layer base {
   :root {
     --background: 0 0% 2%;
@@ -10,15 +39,18 @@
     --card-foreground: 0 0% 95%;
     --popover: 0 0% 5%;
     --popover-foreground: 0 0% 95%;
-    --primary: 161 94% 15%; /* Bold Dark Green */
+    --primary: 161 94% 15%;
+    /* Bold Dark Green */
     --primary-foreground: 0 0% 100%;
     --secondary: 0 0% 10%;
     --secondary-foreground: 0 0% 95%;
     --muted: 0 0% 8%;
     --muted-foreground: 0 0% 55%;
-    --accent: 45 93% 47%; /* Amber Yellow */
+    --accent: 45 93% 47%;
+    /* Amber Yellow */
     --accent-foreground: 0 0% 5%;
-    --destructive: 0 84% 60%; /* Rose Red */
+    --destructive: 0 84% 60%;
+    /* Rose Red */
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 12%;
     --input: 0 0% 12%;
@@ -31,22 +63,33 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground font-body antialiased selection:bg-primary/30 overflow-x-hidden;
     line-height: 1.6;
   }
-  h1, h2, h3, h4, h5, h6 {
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-headline tracking-tight leading-tight;
   }
 }
 
 .gradient-text {
   @apply bg-clip-text text-transparent bg-gradient-to-br from-[#059669] via-[#FBBF24] to-[#EF4444];
-  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6));
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6));
 }
 
 .card-hover-effect {
-  @apply transition-all duration-300 hover:border-primary/40 hover:shadow-[0_0_50px_rgba(6,95,70,0.08)] hover:-translate-y-1.5;
+  @apply transition-all duration-300 hover:border-primary/40 hover:-translate-y-1.5;
+}
+
+.card-hover-effect:hover {
+  box-shadow: 0 0 50px rgba(6, 95, 70, 0.08);
 }
 
 .glass-nav {
@@ -55,19 +98,19 @@
 
 .text-3d-yellow {
   color: #FBBF24;
-  text-shadow: 
+  text-shadow:
     0 1px 0 #92400E,
     0 2px 0 #92400E,
     0 3px 0 #92400E,
     0 4px 0 #92400E,
     0 5px 0 #92400E,
-    0 6px 1px rgba(0,0,0,0.1),
-    0 0 5px rgba(0,0,0,0.1),
-    0 1px 3px rgba(0,0,0,0.3),
-    0 3px 5px rgba(0,0,0,0.2),
-    0 5px 10px rgba(0,0,0,0.25),
-    0 10px 10px rgba(0,0,0,0.2),
-    0 20px 20px rgba(0,0,0,0.15);
+    0 6px 1px rgba(0, 0, 0, 0.1),
+    0 0 5px rgba(0, 0, 0, 0.1),
+    0 1px 3px rgba(0, 0, 0, 0.3),
+    0 3px 5px rgba(0, 0, 0, 0.2),
+    0 5px 10px rgba(0, 0, 0, 0.25),
+    0 10px 10px rgba(0, 0, 0, 0.2),
+    0 20px 20px rgba(0, 0, 0, 0.15);
 }
 
 /* Hero Special Glow */
@@ -84,9 +127,11 @@
 ::-webkit-scrollbar {
   width: 6px;
 }
+
 ::-webkit-scrollbar-track {
   @apply bg-background;
 }
+
 ::-webkit-scrollbar-thumb {
   @apply bg-border rounded-full hover:bg-muted-foreground transition-colors;
 }
