@@ -282,6 +282,45 @@ export async function getJobMatches(userId: string, limit = 20): Promise<JobMatc
     return (data as JobMatch[]) ?? []
 }
 
+export async function saveJobMatches(userId: string, jobs: any[]) {
+    if (!jobs || jobs.length === 0) return [];
+
+    // Check for existing jobs first to avoid duplicates
+    const { data: existingJobs } = await insforge.database.from('job_matches')
+        .select('job_title, company_name')
+        .eq('user_id', userId);
+
+    const existingSignatures = new Set((existingJobs || []).map(j => `${j.job_title}-${j.company_name}`.toLowerCase()));
+
+    const formattedJobs = jobs
+        .filter(j => !existingSignatures.has(`${j.title}-${j.company}`.toLowerCase()))
+        .map(j => ({
+            user_id: userId,
+            job_title: j.title || 'Unknown Role',
+            company_name: j.company || 'Unknown Company',
+            location: j.location || 'Remote',
+            job_type: j.jobType || 'Full-Time',
+            industry: null,
+            experience_level: null,
+            match_percent: j.matchScore || 80,
+            description: j.description || '',
+            requirements: j.requirements || [],
+            match_reasons: j.matchReasons || [],
+            apply_url: j.jobUrl || null,
+            is_saved: false,
+            is_applied: false
+        }));
+
+    if (formattedJobs.length === 0) return [];
+
+    const { data, error } = await insforge.database.from('job_matches').insert(formattedJobs).select()
+    if (error) {
+        console.error("Job Database Save Error:", error)
+        throw error;
+    }
+    return data
+}
+
 export async function toggleSaveJob(userId: string, jobId: string, saved: boolean) {
     return insforge.database.from('job_matches').update({ is_saved: saved }).eq('id', jobId).eq('user_id', userId)
 }

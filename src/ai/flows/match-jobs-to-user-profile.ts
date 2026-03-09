@@ -44,7 +44,10 @@ const JobMatchSchema = z.object({
     .min(0)
     .max(100)
     .describe('A percentage indicating how well the job matches the user profile.'),
-  jobUrl: z.string().url().describe('The URL to the full job posting.').optional(),
+  jobUrl: z.string().url().describe('The URL to the full job posting (MUST BE A REAL URL).').optional(),
+  jobType: z.string().describe('e.g., Full-Time, Internship, Contract.').optional(),
+  requirements: z.array(z.string()).describe('List of key requirements or qualifications for the job.').optional(),
+  matchReasons: z.array(z.string()).describe('List of reasons why the user matches this job well based on their resume.').optional(),
 });
 
 const MatchJobsToUserProfileOutputSchema = z.object({
@@ -82,7 +85,14 @@ User's Industry Preferences: {{{industryPreferences.join(', ')}}
 User's Experience Level: {{{experienceLevel}}}
 User's Job Type Preferences: {{{jobTypePreferences.join(', ')}}
 
-Based on this information, provide a list of highly relevant job opportunities, including a title, company, location, a brief description, a match score (0-100), and an optional job URL.`,
+CRITICAL INSTRUCTIONS:
+1. Identify the user's skills and their target roles from the provided resume text.
+2. Search and discover REAL, LIVE job or internship opportunities online that match the user's profile.
+3. For each job, return a realistic 'jobUrl' pointing to an application page or the company's careers site. DO NOT hallucinate fake URLs.
+4. Extracted descriptions, requirements, and match reasons must be realistic and tailored to the actual user's resume strengths.
+5. Provide around 5-10 strong matches.
+
+Based on this information, provide a list of highly relevant job opportunities.`,
 });
 
 const matchJobsToUserProfileFlow = ai.defineFlow(

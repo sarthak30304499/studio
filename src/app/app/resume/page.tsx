@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useAuth } from "@/lib/supabase/auth-provider"
 import insforge from "@/lib/insforge/client"
-import { getResumeAnalyses, saveResume, saveResumeAnalysis, logActivity, relativeTime, type ResumeAnalysis } from "@/lib/supabase/db"
+import { getResumeAnalyses, saveResume, saveResumeAnalysis, logActivity, relativeTime, saveJobMatches, type ResumeAnalysis } from "@/lib/supabase/db"
 import { analyzeResumeForJob } from "@/ai/flows/analyze-resume-for-job-description"
+import { matchJobsToUserProfile } from "@/ai/flows/match-jobs-to-user-profile"
 import { useToast } from "@/hooks/use-toast"
 import { Upload, FileText, X, ArrowRight, CheckCircle2 } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 function SkeletonBlock({ className = "" }: { className?: string }) {
   return <div className={`rounded-xl animate-pulse ${className}`} style={{ background: "var(--dash-surface-2)" }} />
@@ -38,6 +40,7 @@ const SEVERITY_COLORS: Record<string, string> = { Critical: "var(--dash-red)", I
 export default function ResumeAnalyzerPage() {
   const { user, profile } = useAuth()
   const { toast } = useToast()
+  const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [file, setFile] = useState<File | null>(null)
@@ -49,6 +52,7 @@ export default function ResumeAnalyzerPage() {
   const [analyses, setAnalyses] = useState<ResumeAnalysis[]>([])
   const [activeAnalysis, setActiveAnalysis] = useState<ResumeAnalysis | null>(null)
   const [isDownloading, setIsDownloading] = useState(false)
+  const [isMatching, setIsMatching] = useState(false)
 
   const handleDownloadPDF = async () => {
     if (!activeAnalysis) return;
@@ -72,6 +76,36 @@ export default function ResumeAnalyzerPage() {
       toast({ title: "Download failed", description: "Could not generate PDF.", variant: "destructive" });
     } finally {
       setIsDownloading(false);
+    }
+  }
+
+  const handleFindJobs = async () => {
+    if (!activeAnalysis || !user?.id) return;
+    setIsMatching(true);
+    try {
+      const resumeText = `Target Role: ${activeAnalysis.target_role}\nJob Description: ${activeAnalysis.job_description}\nATS Score: ${activeAnalysis.ats_score}\nFeedback: ${activeAnalysis.role_feedback}`;
+
+      const aiResult = await matchJobsToUserProfile({
+        resumeText: resumeText,
+        targetRoles: [activeAnalysis.target_role || ''],
+        industryPreferences: [],
+        experienceLevel: profile?.experience_level || 'Mid Level',
+        jobTypePreferences: []
+      });
+
+      if (aiResult.jobs && aiResult.jobs.length > 0) {
+        await saveJobMatches(user.id, aiResult.jobs);
+        toast({ title: "Found matching jobs!", description: `Discovered real roles matching your profile.` });
+      } else {
+        toast({ title: "No jobs found", description: "Try adjusting your resume or target role." });
+      }
+
+      router.push("/app/jobs");
+    } catch (err: any) {
+      console.error(err);
+      toast({ title: "Matching failed", description: "Could not fetch AI matched jobs at this time.", variant: "destructive" });
+    } finally {
+      setIsMatching(false);
     }
   }
 
@@ -419,14 +453,12 @@ export default function ResumeAnalyzerPage() {
 
                 {/* Actions */}
                 <div id="pdf-actions" className="flex gap-3 pt-2">
-                  <button onClick={handleDownloadPDF} disabled={isDownloading} className="h-11 px-5 rounded-xl text-[13px] font-semibold transition-all" style={{ background: "var(--dash-surface-1)", border: "1px solid var(--dash-border-1)", color: "var(--dash-text-2)", opacity: isDownloading ? 0.7 : 1, cursor: isDownloading ? "not-allowed" : "pointer" }}>
+                  <button onClick={handleDownloadPDF} disabled={isDownloading || isMatching} className="h-11 px-5 rounded-xl text-[13px] font-semibold transition-all" style={{ background: "var(--dash-surface-1)", border: "1px solid var(--dash-border-1)", color: "var(--dash-text-2)", opacity: isDownloading || isMatching ? 0.7 : 1, cursor: isDownloading || isMatching ? "not-allowed" : "pointer" }}>
                     {isDownloading ? "Generating PDF..." : "Download PDF"}
                   </button>
-                  <a href="/app/jobs">
-                    <button className="h-11 px-5 rounded-xl text-[13px] font-semibold text-white flex items-center gap-2" style={{ background: "var(--dash-accent)" }}>
-                      Find Matching Jobs <ArrowRight size={14} />
-                    </button>
-                  </a>
+                  <button onClick={handleFindJobs} disabled={isMatching || isDownloading} className="h-11 px-5 rounded-xl text-[13px] font-semibold text-white flex items-center gap-2 transition-all" style={{ background: "var(--dash-accent)", opacity: isMatching || isDownloading ? 0.7 : 1, cursor: isMatching || isDownloading ? "not-allowed" : "pointer" }}>
+                    {isMatching ? "Searching Live Jobs..." : "Find Matching Jobs"} <ArrowRight size={14} />
+                  </button>
                 </div>
               </div>
             )}
