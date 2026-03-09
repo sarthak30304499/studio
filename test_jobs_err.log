@@ -1,0 +1,22 @@
+
+Failure: GenkitError: FAILED_PRECONDITION: Please pass in the API key or set the GEMINI_API_KEY or GOOGLE_API_KEY environment variable.
+For more details see https://genkit.dev/docs/plugins/google-genai/
+    at Object.<anonymous> (C:\Users\sarth\OneDrive\Desktop\supernova\studio\node_modules\@genkit-ai\google-genai\src\googleai\utils.ts:44:38)
+    at Module._compile (node:internal/modules/cjs/loader:1688:14)
+    at Object.transformer (C:\Users\sarth\OneDrive\Desktop\supernova\studio\node_modules\tsx\dist\register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1423:32)
+    at Function._load (node:internal/modules/cjs/loader:1246:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Module.require (node:internal/modules/cjs/loader:1445:12)
+    at require (node:internal/modules/helpers:135:16)
+    at Object.<anonymous> (C:\Users\sarth\OneDrive\Desktop\supernova\studio\node_modules\@genkit-ai\google-genai\src\googleai\index.ts:28:33) {
+  source: undefined,
+  status: 'FAILED_PRECONDITION',
+  detail: undefined,
+  code: 400,
+  originalMessage: 'Please pass in the API key or set the GEMINI_API_KEY or GOOGLE_API_KEY environment variable.\n' +
+    'For more details see https://genkit.dev/docs/plugins/google-genai/',
+  ignoreFailedSpan: true,
+  traceId: 'bb5bebb3c8383af1460c7a6ab9f0dc6f'
+}

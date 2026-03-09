@@ -8,17 +8,19 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background relative overflow-x-hidden selection:bg-primary/30">
       {/* Spline 3D Background Model - Interaction Disabled */}
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        <iframe
-          src="https://my.spline.design/blackhole-KZLxtxV49QP6rjCCgFCMUiNB/"
-          frameBorder="0"
-          width="100%"
-          height="100%"
-          className="w-full h-full opacity-60 scale-110"
-        ></iframe>
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden flex items-center justify-center">
+        <div className="w-[50vw] h-[50vh] scale-[2.2]">
+          <iframe
+            src="https://my.spline.design/blackhole-KZLxtxV49QP6rjCCgFCMUiNB/"
+            frameBorder="0"
+            width="100%"
+            height="100%"
+            className="w-full h-full opacity-60"
+          ></iframe>
+        </div>
         {/* Thematic Overlays for Symmetry and Contrast */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(6,95,70,0.1),transparent_70%)]" />
-        <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-transparent to-background" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(6,95,70,0.1),transparent_70%)] pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-transparent to-background pointer-events-none" />
       </div>
 
       <div className="relative z-10">
