@@ -48,6 +48,32 @@ export default function ResumeAnalyzerPage() {
   const [historyLoading, setHistoryLoading] = useState(true)
   const [analyses, setAnalyses] = useState<ResumeAnalysis[]>([])
   const [activeAnalysis, setActiveAnalysis] = useState<ResumeAnalysis | null>(null)
+  const [isDownloading, setIsDownloading] = useState(false)
+
+  const handleDownloadPDF = async () => {
+    if (!activeAnalysis) return;
+    setIsDownloading(true);
+    try {
+      const element = document.getElementById("resume-analysis-content");
+      if (!element) return;
+
+      const html2pdf = (await import('html2pdf.js')).default;
+      const opt = {
+        margin: 10,
+        filename: `supernova-analysis-${activeAnalysis.file_name || 'resume'}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#07070D', ignoreElements: (element: Element) => element.id === 'pdf-actions' },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      await html2pdf().set(opt).from(element).save();
+    } catch (error) {
+      console.error("PDF generation failed:", error);
+      toast({ title: "Download failed", description: "Could not generate PDF.", variant: "destructive" });
+    } finally {
+      setIsDownloading(false);
+    }
+  }
 
   // Pre-fill from profile
   useEffect(() => {
@@ -316,7 +342,7 @@ export default function ResumeAnalyzerPage() {
             )}
 
             {activeAnalysis && !loading && (
-              <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div id="resume-analysis-content" className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 {/* Score Hero */}
                 <div className="rounded-[16px] p-6" style={{ background: "var(--dash-surface-1)", border: "1px solid var(--dash-border-1)" }}>
                   <div className="flex flex-col md:flex-row gap-6">
@@ -392,9 +418,9 @@ export default function ResumeAnalyzerPage() {
                 )}
 
                 {/* Actions */}
-                <div className="flex gap-3 pt-2">
-                  <button className="h-11 px-5 rounded-xl text-[13px] font-semibold" style={{ background: "var(--dash-surface-1)", border: "1px solid var(--dash-border-1)", color: "var(--dash-text-2)" }}>
-                    Download PDF
+                <div id="pdf-actions" className="flex gap-3 pt-2">
+                  <button onClick={handleDownloadPDF} disabled={isDownloading} className="h-11 px-5 rounded-xl text-[13px] font-semibold transition-all" style={{ background: "var(--dash-surface-1)", border: "1px solid var(--dash-border-1)", color: "var(--dash-text-2)", opacity: isDownloading ? 0.7 : 1, cursor: isDownloading ? "not-allowed" : "pointer" }}>
+                    {isDownloading ? "Generating PDF..." : "Download PDF"}
                   </button>
                   <a href="/app/jobs">
                     <button className="h-11 px-5 rounded-xl text-[13px] font-semibold text-white flex items-center gap-2" style={{ background: "var(--dash-accent)" }}>
